@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
-use baru::input::Input;
-use baru::swap::{alice_finalize_transaction, bob_create_transaction, sign_with_key, Actor};
+use baru::{
+    input::Input,
+    swap::{alice_finalize_transaction, bob_create_transaction, sign_with_key, Actor},
+};
 use elements::{
     bitcoin,
     bitcoin::{Amount, Network, PrivateKey, PublicKey},

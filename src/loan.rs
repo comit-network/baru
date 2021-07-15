@@ -1,5 +1,4 @@
-use crate::estimate_transaction_size::estimate_virtual_size;
-use crate::input::Input;
+use crate::{estimate_transaction_size::estimate_virtual_size, input::Input};
 use anyhow::{anyhow, bail, Context, Result};
 use elements::{
     bitcoin::{util::psbt::serialize::Serialize, Amount, Network, PrivateKey, PublicKey},

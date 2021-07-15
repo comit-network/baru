@@ -1,5 +1,7 @@
-use crate::estimate_transaction_size::estimate_virtual_size;
-use crate::input::{Input, UnblindedInput};
+use crate::{
+    estimate_transaction_size::estimate_virtual_size,
+    input::{Input, UnblindedInput},
+};
 use anyhow::{bail, Context, Result};
 use elements::{
     bitcoin::Amount,
