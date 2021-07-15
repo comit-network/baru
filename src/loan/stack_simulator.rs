@@ -2,11 +2,9 @@
 
 use anyhow::{anyhow, Result};
 use bitcoin_hashes::Hash;
-use elements::{
-    bitcoin::PublicKey,
-    secp256k1_zkp::{Message, Signature, SECP256K1},
-    Script,
-};
+use elements::bitcoin::PublicKey;
+use elements::secp256k1_zkp::{Message, Signature, SECP256K1};
+use elements::Script;
 
 fn simulate(script: Script, witness_stack: Vec<Vec<u8>>) -> Result<Vec<Vec<u8>>> {
     let mut stack = witness_stack;
@@ -119,12 +117,12 @@ fn format(stack: &[Vec<u8>]) -> String {
 #[cfg(all(test))]
 mod test {
     use super::*;
-    use elements::{
-        bitcoin::{util::psbt::serialize::Serialize, Network, PrivateKey},
-        opcodes::all::*,
-        script::Builder,
-        secp256k1_zkp::{rand::thread_rng, SecretKey},
-    };
+    use elements::bitcoin::util::psbt::serialize::Serialize;
+    use elements::bitcoin::{Network, PrivateKey};
+    use elements::opcodes::all::*;
+    use elements::script::Builder;
+    use elements::secp256k1_zkp::rand::thread_rng;
+    use elements::secp256k1_zkp::SecretKey;
     use std::env;
 
     const LAST_ITEM: u8 = 0xFF;

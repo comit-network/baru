@@ -3,13 +3,15 @@ mod tests {
     use crate::loan::{make_keypair, Borrower0, Lender0};
     use anyhow::{Context, Result};
     use bitcoin_hashes::Hash;
+    use elements::bitcoin::util::psbt::serialize::Serialize;
+    use elements::bitcoin::{Amount, PublicKey};
+    use elements::script::Builder;
+    use elements::secp256k1_zkp::rand::thread_rng;
+    use elements::secp256k1_zkp::{SecretKey, SECP256K1};
+    use elements::sighash::SigHashCache;
     use elements::{
-        bitcoin::{util::psbt::serialize::Serialize, Amount, PublicKey},
-        opcodes,
-        script::Builder,
-        secp256k1_zkp::{rand::thread_rng, SecretKey, SECP256K1},
-        sighash::SigHashCache,
-        Address, AddressParams, AssetId, OutPoint, Script, SigHashType, Transaction, TxOut, Txid,
+        opcodes, Address, AddressParams, AssetId, OutPoint, Script, SigHashType, Transaction,
+        TxOut, Txid,
     };
     use elements_harness::Elementsd;
     use elements_rpc::ElementsRpc;

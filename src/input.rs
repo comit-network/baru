@@ -1,8 +1,6 @@
 use anyhow::Result;
-use elements::{
-    secp256k1_zkp::{Secp256k1, SecretKey, Verification},
-    OutPoint, TxOut, TxOutSecrets,
-};
+use elements::secp256k1_zkp::{Secp256k1, SecretKey, Verification};
+use elements::{OutPoint, TxOut, TxOutSecrets};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Input {

@@ -2,7 +2,7 @@
   "$schema": "https://dprint.dev/schemas/v0.json",
   "incremental": true,
   "rustfmt": {
-    "merge_imports": true
+    "imports_granularity": "module"
   },
   "includes": ["**/*.{md,rs,toml}"],
   "excludes": ["**/target"],

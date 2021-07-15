@@ -1,22 +1,16 @@
-use crate::{
-    estimate_transaction_size::estimate_virtual_size,
-    input::{Input, UnblindedInput},
-};
+use crate::estimate_transaction_size::estimate_virtual_size;
+use crate::input::{Input, UnblindedInput};
 use anyhow::{bail, Context, Result};
+use elements::bitcoin::Amount;
+use elements::hashes::{hash160, Hash};
+use elements::script::Builder;
+use elements::secp256k1_zkp::{Message, PublicKey};
+use elements::sighash::SigHashCache;
 use elements::{
-    bitcoin::Amount,
-    confidential,
-    hashes::{hash160, Hash},
-    opcodes,
-    script::Builder,
-    secp256k1_zkp::{Message, PublicKey},
-    sighash::SigHashCache,
-    Address, AssetId, SigHashType, Transaction, TxIn, TxOut, TxOutSecrets,
+    confidential, opcodes, Address, AssetId, SigHashType, Transaction, TxIn, TxOut, TxOutSecrets,
 };
-use secp256k1::{
-    rand::{CryptoRng, RngCore},
-    Secp256k1, SecretKey, Signing, Verification,
-};
+use secp256k1::rand::{CryptoRng, RngCore};
+use secp256k1::{Secp256k1, SecretKey, Signing, Verification};
 use std::future::Future;
 
 // TODO: Replace this with a PSET

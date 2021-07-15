@@ -1,21 +1,18 @@
 use anyhow::{Context, Result};
-use baru::{
-    input::Input,
-    swap::{alice_finalize_transaction, bob_create_transaction, sign_with_key, Actor},
-};
+use baru::input::Input;
+use baru::swap::{alice_finalize_transaction, bob_create_transaction, sign_with_key, Actor};
+use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
+use elements::encode::serialize_hex;
+use elements::hashes::{hash160, Hash};
+use elements::script::Builder;
+use elements::sighash::SigHashCache;
 use elements::{
-    bitcoin,
-    bitcoin::{Amount, Network, PrivateKey, PublicKey},
-    encode::serialize_hex,
-    hashes::{hash160, Hash},
-    opcodes,
-    script::Builder,
-    sighash::SigHashCache,
-    Address, AddressParams, OutPoint, SigHashType, Transaction, TxIn, TxOut, Txid,
+    bitcoin, opcodes, Address, AddressParams, OutPoint, SigHashType, Transaction, TxIn, TxOut, Txid,
 };
 use elements_harness::Elementsd;
 use elements_rpc::{Client, ElementsRpc};
-use secp256k1::{rand::thread_rng, Message, SecretKey, SECP256K1};
+use secp256k1::rand::thread_rng;
+use secp256k1::{Message, SecretKey, SECP256K1};
 use testcontainers::clients::Cli;
 
 #[tokio::test]

@@ -1,21 +1,22 @@
-use crate::{estimate_transaction_size::estimate_virtual_size, input::Input};
+use crate::estimate_transaction_size::estimate_virtual_size;
+use crate::input::Input;
 use anyhow::{anyhow, bail, Context, Result};
+use elements::bitcoin::util::psbt::serialize::Serialize;
+use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
+use elements::confidential::{Asset, AssetBlindingFactor, Value, ValueBlindingFactor};
+use elements::encode::Encodable;
+use elements::hashes::{sha256d, Hash};
+use elements::opcodes::all::*;
+use elements::script::Builder;
+use elements::secp256k1_zkp::rand::{CryptoRng, RngCore};
+use elements::secp256k1_zkp::{Secp256k1, SecretKey, Signature, Signing, Verification, SECP256K1};
+use elements::sighash::SigHashCache;
 use elements::{
-    bitcoin::{util::psbt::serialize::Serialize, Amount, Network, PrivateKey, PublicKey},
-    confidential::{Asset, AssetBlindingFactor, Value, ValueBlindingFactor},
-    encode::Encodable,
-    hashes::{sha256d, Hash},
-    opcodes::all::*,
-    script::Builder,
-    secp256k1_zkp::{
-        rand::{CryptoRng, RngCore},
-        Secp256k1, SecretKey, Signature, Signing, Verification, SECP256K1,
-    },
-    sighash::SigHashCache,
     Address, AddressParams, AssetId, OutPoint, Script, SigHashType, Transaction, TxIn, TxInWitness,
     TxOut, TxOutSecrets,
 };
-use secp256k1_zkp::{rand::thread_rng, SurjectionProof, Tag};
+use secp256k1_zkp::rand::thread_rng;
+use secp256k1_zkp::{SurjectionProof, Tag};
 use std::future::Future;
 
 #[cfg(test)]
@@ -48,8 +49,10 @@ pub struct LoanResponse {
 }
 
 pub mod transaction_as_string {
-    use elements::{encode::serialize_hex, Transaction};
-    use serde::{de::Error, Deserialize, Deserializer, Serializer};
+    use elements::encode::serialize_hex;
+    use elements::Transaction;
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(a: &Transaction, s: S) -> Result<S::Ok, S::Error> {
         s.serialize_str(&serialize_hex(a))
@@ -714,7 +717,8 @@ impl Lender0 {
     }
 
     fn calc_principal_amount(loan_request: &LoanRequest, rate: u64) -> Result<Amount> {
-        use rust_decimal::{prelude::ToPrimitive, Decimal};
+        use rust_decimal::prelude::ToPrimitive;
+        use rust_decimal::Decimal;
 
         let sats = loan_request.collateral_amount.as_sat();
         let btc = Decimal::from(sats)

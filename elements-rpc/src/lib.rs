@@ -1,14 +1,13 @@
 use anyhow::{bail, Context, Result};
 use bitcoin_hashes::hex::FromHex;
-use elements::{
-    bitcoin::{Amount, PrivateKey},
-    confidential::{Asset, Nonce, Value},
-    encode::serialize_hex,
-    secp256k1_zkp::{SecretKey, Signature},
-    Address, AssetId, OutPoint, Transaction, TxOut, TxOutWitness, Txid,
-};
+use elements::bitcoin::{Amount, PrivateKey};
+use elements::confidential::{Asset, Nonce, Value};
+use elements::encode::serialize_hex;
+use elements::secp256k1_zkp::{SecretKey, Signature};
+use elements::{Address, AssetId, OutPoint, Transaction, TxOut, TxOutWitness, Txid};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
+use std::str::FromStr;
 
 #[jsonrpc_client::api(version = "1.0")]
 pub trait ElementsRpc {
