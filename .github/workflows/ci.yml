@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 'staging'
+      - 'master'
+
+jobs:
+  static_analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+      - uses: dprint/check@v1.5
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          override: true
+          toolchain: stable
+          components: clippy
+
+      - name: Run clippy with default features
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  build_test_workspace:
+    strategy:
+      matrix:
+        target: [ x86_64-unknown-linux-gnu, x86_64-apple-darwin ]
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          override: true
+          toolchain: stable
+
+      - name: Cache target directory
+        uses: actions/cache@v2
+        if: matrix.os != 'macos-latest'
+        with:
+          path: target
+          key: ${{ matrix.os }}-target-directory-${{ hashFiles('Cargo.lock') }}-v2
+
+      - name: Cargo test (all workspace)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo test --workspace --all-features
+
+      - name: Cargo build
+        if: matrix.os == 'macos-latest'
+        run: cargo build --workspace --all-features
