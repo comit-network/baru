@@ -1,3 +1,6 @@
+[workspace]
+members = [ "elements-rpc" ]
+
 [package]
 name = "baru"
 version = "0.1.0"
@@ -24,6 +27,6 @@ thiserror = "1"
 
 [dev-dependencies]
 elements-harness = { git = "https://github.com/comit-network/elements-harness" }
-elements-rpc = { git = "https://github.com/comit-network/elements-rpc" }
+elements-rpc = { path = "./elements-rpc" }
 testcontainers = "0.12"
 tokio = { version = "1", default-features = false, features = [ "macros" ] }
