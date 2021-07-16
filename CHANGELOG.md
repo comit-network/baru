@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2021-07-16
+
 ### Added
 
 - Loan protocol and swap libraries originally developed in [Project Waves](https://github.com/comit-network/waves).
 
-[Unreleased]: https://github.com/comit-network/baru/compare/490bdb9db562dfd64010d6ebd0aa9f8bcac07f0a...HEAD
+[Unreleased]: https://github.com/comit-network/baru/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/comit-network/baru/releases/tag/0.1.0
