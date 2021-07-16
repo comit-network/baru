@@ -7,6 +7,7 @@ version = "0.1.0"
 authors = [ "CoBloX Team <team@coblox.tech>" ]
 edition = "2018"
 license-file = "LICENSE"
+description = "Library to facilitate DeFi on Liquid"
 
 [dependencies]
 anyhow = "1"
