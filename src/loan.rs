@@ -1,27 +1,82 @@
 use crate::estimate_transaction_size::estimate_virtual_size;
 use crate::input::Input;
 use anyhow::{anyhow, bail, Context, Result};
-use elements::bitcoin::util::psbt::serialize::Serialize;
+use bitcoin_hashes::hex::ToHex;
+use conquer_once::Lazy;
 use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
-use elements::confidential::{Asset, AssetBlindingFactor, Value, ValueBlindingFactor};
-use elements::encode::Encodable;
-use elements::hashes::{sha256d, Hash};
-use elements::opcodes::all::*;
-use elements::script::Builder;
+use elements::confidential::{Asset, AssetBlindingFactor, ValueBlindingFactor};
+use elements::encode::serialize;
 use elements::secp256k1_zkp::rand::{CryptoRng, RngCore};
-use elements::secp256k1_zkp::{Secp256k1, SecretKey, Signature, Signing, Verification, SECP256K1};
+use elements::secp256k1_zkp::{Secp256k1, SecretKey, Signing, Verification, SECP256K1};
 use elements::sighash::SigHashCache;
 use elements::{
-    Address, AddressParams, AssetId, OutPoint, Script, SigHashType, Transaction, TxIn, TxInWitness,
-    TxOut, TxOutSecrets,
+    Address, AddressParams, AssetId, OutPoint, SigHashType, Transaction, TxIn, TxInWitness, TxOut,
+    TxOutSecrets,
 };
-use secp256k1_zkp::rand::thread_rng;
+use elements_miniscript::descriptor::{CovSatisfier, ElementsTrait};
+use elements_miniscript::miniscript::satisfy::After;
+use elements_miniscript::{Descriptor, DescriptorTrait};
 use secp256k1_zkp::{SurjectionProof, Tag};
+use std::collections::HashMap;
 use std::future::Future;
+use std::str::FromStr;
 
 #[cfg(test)]
 mod protocol_tests;
 mod stack_simulator;
+
+/// Secret key used to produce a signature which proves that an
+/// input's witness stack contains transaction data equivalent to the
+/// transaction which includes the input itself.
+///
+/// This secret key MUST NOT be used for anything other than to
+/// satisfy this verification step which enables transaction
+/// introspection. It is therefore a global, publicly known secret key
+/// to be used in every instance of this protocol.
+static COVENANT_SK: Lazy<SecretKey> = Lazy::new(|| {
+    SecretKey::from_str("cc5417e929f7756df9a599715ad0780cea75659279cd4e2c0a19adb6339d7011")
+        .expect("is a valid key")
+});
+
+/// Public key of the `COVENANT_SK`, used to verify that the
+/// transaction data on the input's witness stack is equivalent to the
+/// transaction which inludes the input itself.
+static COVENANT_PK: &str = "03b9b6059008e3576aad58e05a3a3e37133b05f68cda8535ec097ef4bae564a6af";
+
+/// Generate the miniscript descriptor of the collateral output.
+///
+/// It defines a "liquidation branch" which allows the lender to claim
+/// all the collateral for themself if the `timelock` expires. The
+/// lender must identify themself by providing a signature on
+/// `lender_pk`.
+///
+/// It also defines a "repayment branch" which allows the borrower to
+/// repay the loan to reclaim the collateral. The borrower must
+/// identify themself by providing a signature on `borrower_pk`. To
+/// ensure that the borrower does indeed repay the loan, the script
+/// will check that the spending transaction has the
+/// `repayment_output` as vout 0.
+///
+/// The first element of the covenant descriptor is the shared
+/// `covenant_pk`, which is only used to verify that the transaction
+/// data on the witness stack matches the transaction which triggered
+/// the call.
+fn collateral_descriptor(
+    borrower_pk: PublicKey,
+    lender_pk: PublicKey,
+    timelock: u64,
+    repayment_output: TxOut,
+) -> Result<Descriptor<PublicKey>> {
+    let repayment_output = serialize(&repayment_output).to_hex();
+    let desc = Descriptor::<elements::bitcoin::PublicKey>::from_str(
+        &(format!(
+            "elcovwsh({},or_i(and_v(v:pk({}),after({})),and_v(v:pk({}),outputs_pref({}))))",
+            COVENANT_PK, lender_pk, timelock, borrower_pk, repayment_output,
+        )),
+    )?;
+
+    Ok(desc)
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoanRequest {
@@ -46,25 +101,6 @@ pub struct LoanResponse {
     repayment_collateral_vbf: ValueBlindingFactor,
     pub timelock: u64,
     repayment_principal_output: TxOut,
-}
-
-pub mod transaction_as_string {
-    use elements::encode::serialize_hex;
-    use elements::Transaction;
-    use serde::de::Error;
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(a: &Transaction, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(&serialize_hex(a))
-    }
-
-    pub fn deserialize<'d, D: Deserializer<'d>>(d: D) -> Result<Transaction, D::Error> {
-        let string = String::deserialize(d)?;
-        let bytes = hex::decode(string).map_err(D::Error::custom)?;
-        let tx = elements::encode::deserialize(&bytes).map_err(D::Error::custom)?;
-
-        Ok(tx)
-    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -152,14 +188,14 @@ impl Borrower0 {
             })
             .context("no principal txout")?;
 
-        let collateral_script = loan_contract(
+        let collateral_descriptor = collateral_descriptor(
             self.keypair.1,
             loan_response.lender_pk,
             loan_response.timelock,
             loan_response.repayment_principal_output.clone(),
         )?;
+        let collateral_address = collateral_descriptor.address(&AddressParams::ELEMENTS)?;
 
-        let collateral_address = Address::p2wsh(&collateral_script, None, &AddressParams::ELEMENTS);
         let collateral_script_pubkey = collateral_address.script_pubkey();
         let collateral_blinding_sk = loan_response.repayment_collateral_input.blinding_key;
         transaction
@@ -215,7 +251,7 @@ impl Borrower0 {
             keypair: self.keypair,
             loan_transaction: transaction,
             collateral_amount: self.collateral_amount,
-            collateral_script,
+            collateral_descriptor,
             principal_tx_out_amount,
             address: self.address.clone(),
             repayment_collateral_input: loan_response.repayment_collateral_input,
@@ -234,7 +270,7 @@ pub struct Borrower1 {
     pub loan_transaction: Transaction,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     pub collateral_amount: Amount,
-    collateral_script: Script,
+    collateral_descriptor: Descriptor<PublicKey>,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     pub principal_tx_out_amount: Amount,
     address: Address,
@@ -417,28 +453,46 @@ impl Borrower1 {
 
         // fulfill collateral input covenant script
         {
-            let sighash = SigHashCache::new(&tx).segwitv0_sighash(
-                1,
-                &self.collateral_script.clone(),
-                self.repayment_collateral_input.original_txout.value,
-                SigHashType::All,
-            );
+            let descriptor = self.collateral_descriptor.clone();
+            let descriptor_cov = descriptor.as_cov()?;
 
-            let sig = SECP256K1.sign(
-                &elements::secp256k1_zkp::Message::from(sighash),
-                &self.keypair.0,
-            );
+            let collateral_value = self.repayment_collateral_input.original_txout.value;
+            let cov_script = descriptor_cov.cov_script_code();
 
-            let script_witness = RepaymentWitnessStack::new(
-                sig,
-                self.keypair.1,
-                self.repayment_collateral_input.original_txout.value,
-                &tx,
-                self.collateral_script.clone(),
-            )
-            .unwrap()
-            .serialize()
-            .unwrap();
+            let cov_sat =
+                CovSatisfier::new_segwitv0(&tx, 1, collateral_value, &cov_script, SigHashType::All);
+
+            let cov_pk_sat = {
+                let mut hash_map = HashMap::new();
+                let sighash = cov_sat.segwit_sighash()?;
+                let sighash = elements::secp256k1_zkp::Message::from(sighash);
+
+                let sig = SECP256K1.sign(&sighash, &COVENANT_SK);
+                hash_map.insert(*descriptor_cov.pk(), (sig, SigHashType::All));
+
+                hash_map
+            };
+
+            let ident_pk_sat = {
+                let mut hash_map = HashMap::new();
+
+                let script = descriptor.explicit_script();
+                let sighash = SigHashCache::new(&tx).segwitv0_sighash(
+                    1,
+                    &script,
+                    collateral_value,
+                    SigHashType::All,
+                );
+                let sighash = elements::secp256k1_zkp::Message::from(sighash);
+
+                let sig = SECP256K1.sign(&sighash, &self.keypair.0);
+                hash_map.insert(self.keypair.1, (sig, SigHashType::All));
+
+                hash_map
+            };
+
+            let (script_witness, _) =
+                descriptor_cov.get_satisfaction((cov_sat, cov_pk_sat, ident_pk_sat))?;
 
             tx.input[1].witness = TxInWitness {
                 amount_rangeproof: None,
@@ -550,19 +604,18 @@ impl Lender0 {
         };
 
         let (_, lender_pk) = self.keypair;
-        let collateral_script = loan_contract(
+        let (collateral_blinding_sk, collateral_blinding_pk) = make_keypair(rng);
+
+        let collateral_descriptor = collateral_descriptor(
             loan_request.borrower_pk,
             lender_pk,
             loan_request.timelock,
             repayment_principal_output.clone(),
-        )?;
+        )
+        .context("could not build collateral descriptor")?;
+        let collateral_address = collateral_descriptor
+            .blind_addr(Some(collateral_blinding_pk.key), &AddressParams::ELEMENTS)?;
 
-        let (collateral_blinding_sk, collateral_blinding_pk) = make_keypair(&mut thread_rng());
-        let collateral_address = Address::p2wsh(
-            &collateral_script,
-            Some(collateral_blinding_pk.key),
-            &AddressParams::ELEMENTS,
-        );
         let inputs_not_last_confidential = inputs
             .iter()
             .map(|(asset, secrets)| (*asset, Some(*secrets)))
@@ -706,7 +759,7 @@ impl Lender0 {
             address: self.address,
             timelock: loan_request.timelock,
             loan_transaction,
-            collateral_script,
+            collateral_descriptor,
             collateral_amount: loan_request.collateral_amount,
             repayment_collateral_input,
             repayment_collateral_abf,
@@ -740,7 +793,7 @@ pub struct Lender1 {
     address: Address,
     pub timelock: u64,
     loan_transaction: Transaction,
-    collateral_script: Script,
+    collateral_descriptor: Descriptor<PublicKey>,
     collateral_amount: Amount,
     repayment_collateral_input: Input,
     repayment_collateral_abf: AssetBlindingFactor,
@@ -827,329 +880,75 @@ impl Lender1 {
 
         let mut liquidation_transaction = Transaction {
             version: 2,
-            lock_time: 0,
+            lock_time: self.timelock as u32,
             input: tx_ins,
             output: tx_outs,
         };
 
         // fulfill collateral input covenant script to liquidate the position
-        let sighash = SigHashCache::new(&liquidation_transaction).segwitv0_sighash(
-            0,
-            &self.collateral_script.clone(),
-            self.repayment_collateral_input.original_txout.value,
-            SigHashType::All,
-        );
+        {
+            let descriptor = self.collateral_descriptor.clone();
+            let descriptor_cov = descriptor.as_cov()?;
 
-        let sig = SECP256K1.sign(
-            &elements::secp256k1_zkp::Message::from(sighash),
-            &self.keypair.0,
-        );
+            let collateral_value = self.repayment_collateral_input.original_txout.value;
+            let cov_script = descriptor_cov.cov_script_code();
 
-        let mut sig = sig.serialize_der().to_vec();
-        sig.push(SigHashType::All as u8);
-        let if_flag = vec![];
+            let cov_sat = CovSatisfier::new_segwitv0(
+                &liquidation_transaction,
+                0,
+                collateral_value,
+                &cov_script,
+                SigHashType::All,
+            );
 
-        liquidation_transaction.input[0].witness = TxInWitness {
-            amount_rangeproof: None,
-            inflation_keys_rangeproof: None,
-            script_witness: vec![sig, if_flag, self.collateral_script.to_bytes()],
-            pegin_witness: vec![],
-        };
+            let cov_pk_sat = {
+                let mut hash_map = HashMap::new();
+                let sighash = cov_sat.segwit_sighash()?;
+
+                let sig = SECP256K1.sign(
+                    &elements::secp256k1_zkp::Message::from(sighash),
+                    &COVENANT_SK,
+                );
+                hash_map.insert(*descriptor_cov.pk(), (sig, SigHashType::All));
+
+                hash_map
+            };
+
+            let ident_pk_sat = {
+                let mut hash_map = HashMap::new();
+
+                let script = descriptor.explicit_script();
+                let sighash = SigHashCache::new(&liquidation_transaction).segwitv0_sighash(
+                    0,
+                    &script,
+                    collateral_value,
+                    SigHashType::All,
+                );
+                let sighash = elements::secp256k1_zkp::Message::from(sighash);
+
+                let sig = SECP256K1.sign(&sighash, &self.keypair.0);
+                hash_map.insert(self.keypair.1, (sig, SigHashType::All));
+
+                hash_map
+            };
+
+            // TODO: Model timelocks as u32
+            let after_sat = After(self.timelock as u32);
+
+            let (script_witness, _) = self.collateral_descriptor.get_satisfaction((
+                cov_sat,
+                cov_pk_sat,
+                ident_pk_sat,
+                after_sat,
+            ))?;
+            liquidation_transaction.input[0].witness.script_witness = script_witness;
+        }
 
         Ok(liquidation_transaction)
     }
 }
 
-fn loan_contract(
-    borrower_pk: PublicKey,
-    lender_pk: PublicKey,
-    timelock: u64,
-    repayment_output: TxOut,
-) -> Result<Script> {
-    let mut repayment_output_bytes = Vec::new();
-    repayment_output.consensus_encode(&mut repayment_output_bytes)?;
-
-    Ok(Builder::new()
-        .push_opcode(OP_IF)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_slice(repayment_output_bytes.as_slice())
-        .push_opcode(OP_SWAP)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_HASH256)
-        .push_opcode(OP_DEPTH)
-        .push_opcode(OP_1SUB)
-        .push_opcode(OP_PICK)
-        .push_opcode(OP_PUSHNUM_1)
-        .push_opcode(OP_CAT)
-        .push_slice(&borrower_pk.serialize())
-        .push_opcode(OP_CHECKSIGVERIFY)
-        .push_opcode(OP_TOALTSTACK)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_FROMALTSTACK)
-        .push_opcode(OP_SWAP)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_CAT)
-        .push_opcode(OP_SHA256)
-        .push_opcode(OP_SWAP)
-        .push_opcode(OP_CHECKSIGFROMSTACK)
-        .push_opcode(OP_ELSE)
-        .push_int(timelock as i64)
-        .push_opcode(OP_CLTV)
-        .push_opcode(OP_DROP)
-        .push_slice(&lender_pk.serialize())
-        .push_opcode(OP_CHECKSIG)
-        .push_opcode(OP_ENDIF)
-        .into_script())
-}
-
-struct RepaymentWitnessStack {
-    sig: Signature,
-    pk: PublicKey,
-    tx_version: u32,
-    hash_prev_out: sha256d::Hash,
-    hash_sequence: sha256d::Hash,
-    hash_issuances: sha256d::Hash,
-    input: InputData,
-    other_outputs: Vec<TxOut>,
-    lock_time: u32,
-    sighash_type: SigHashType,
-}
-
-struct InputData {
-    previous_output: OutPoint,
-    script: Script,
-    value: Value,
-    sequence: u32,
-}
-
-impl RepaymentWitnessStack {
-    fn new(
-        sig: Signature,
-        pk: PublicKey,
-        collateral_value: Value,
-        tx: &Transaction,
-        script: Script,
-    ) -> Result<Self> {
-        let tx_version = tx.version;
-
-        let hash_prev_out = {
-            let mut enc = sha256d::Hash::engine();
-            for txin in tx.input.iter() {
-                txin.previous_output.consensus_encode(&mut enc)?;
-            }
-
-            sha256d::Hash::from_engine(enc)
-        };
-
-        let hash_sequence = {
-            let mut enc = sha256d::Hash::engine();
-
-            for txin in tx.input.iter() {
-                txin.sequence.consensus_encode(&mut enc)?;
-            }
-            sha256d::Hash::from_engine(enc)
-        };
-
-        let hash_issuances = {
-            let mut enc = sha256d::Hash::engine();
-            for txin in tx.input.iter() {
-                if txin.has_issuance() {
-                    txin.asset_issuance.consensus_encode(&mut enc)?;
-                } else {
-                    0u8.consensus_encode(&mut enc)?;
-                }
-            }
-            sha256d::Hash::from_engine(enc)
-        };
-
-        let input = {
-            let input = &tx.input[1];
-            InputData {
-                previous_output: input.previous_output,
-                script,
-                value: collateral_value,
-                sequence: input.sequence,
-            }
-        };
-
-        let other_outputs = tx.output[1..].to_vec();
-
-        let lock_time = tx.lock_time;
-
-        let sighash_type = SigHashType::All;
-
-        Ok(Self {
-            sig,
-            pk,
-            tx_version,
-            hash_prev_out,
-            hash_sequence,
-            hash_issuances,
-            input,
-            other_outputs,
-            lock_time,
-            sighash_type,
-        })
-    }
-
-    // Items on the witness stack are limited to 80 bytes, so we have
-    // to split things all around the place e.g. the script in the
-    // input that we sign and the "other" outputs
-    fn serialize(&self) -> anyhow::Result<Vec<Vec<u8>>> {
-        let if_flag = vec![0x01];
-
-        let sig = self.sig.serialize_der().to_vec();
-
-        let pk = self.pk.serialize().to_vec();
-
-        let tx_version = {
-            let mut writer = Vec::new();
-            self.tx_version.consensus_encode(&mut writer)?;
-            writer
-        };
-
-        // input-specific values
-        let (previous_out, script_0, script_1, script_2, value, sequence) = {
-            let InputData {
-                previous_output,
-                script,
-                value,
-                sequence,
-            } = &self.input;
-
-            // a witness stack element cannot be larger than 80 bytes,
-            // so we split the script into 3 to allow for a 240-byte
-            // long script
-            if script.len() > 240 {
-                bail!("script larger than max size of 240 bytes");
-            }
-
-            let third = script.len() / 3;
-
-            (
-                {
-                    let mut writer = Vec::new();
-                    previous_output.consensus_encode(&mut writer)?;
-                    writer
-                },
-                {
-                    let mut writer = Vec::new();
-                    script.consensus_encode(&mut writer)?;
-                    writer[..third].to_vec()
-                },
-                {
-                    let mut writer = Vec::new();
-                    script.consensus_encode(&mut writer)?;
-                    writer[third..2 * third].to_vec()
-                },
-                {
-                    let mut writer = Vec::new();
-                    script.consensus_encode(&mut writer)?;
-                    writer[2 * third..].to_vec()
-                },
-                {
-                    let mut writer = Vec::new();
-                    value.consensus_encode(&mut writer)?;
-                    writer
-                },
-                {
-                    let mut writer = Vec::new();
-                    sequence.consensus_encode(&mut writer)?;
-                    writer
-                },
-            )
-        };
-
-        // hashoutputs (only supporting SigHashType::All)
-        let other_outputs = {
-            let mut other_outputs = vec![];
-
-            if self.other_outputs.len() < 2 {
-                bail!("insufficient outputs");
-            }
-
-            if self.other_outputs.len() > 3 {
-                bail!("too many outputs");
-            }
-
-            for txout in self.other_outputs.iter() {
-                let mut output = Vec::new();
-                txout.consensus_encode(&mut output)?;
-
-                // a witness stack element cannot be larger than 80
-                // bytes, so we split each output into 2 to allow for
-                // 160-byte long txouts
-                if output.len() > 160 {
-                    bail!("txout larger than max size of 160 bytes");
-                }
-
-                let middle = output.len() / 2;
-                other_outputs.push(output[..middle].to_vec());
-                other_outputs.push(output[middle..].to_vec());
-            }
-
-            // fill in space for missing principal change output
-            if other_outputs.len() == 4 {
-                other_outputs.push(vec![]);
-                other_outputs.push(vec![]);
-            }
-
-            other_outputs
-        };
-
-        let lock_time = {
-            let mut writer = Vec::new();
-            self.lock_time.consensus_encode(&mut writer)?;
-            writer
-        };
-
-        let sighash_type = {
-            let mut writer = Vec::new();
-            self.sighash_type.as_u32().consensus_encode(&mut writer)?;
-            writer
-        };
-
-        Ok(vec![
-            sig,
-            pk,
-            tx_version,
-            self.hash_prev_out.to_vec(),
-            self.hash_sequence.to_vec(),
-            self.hash_issuances.to_vec(),
-            previous_out,
-            script_0,
-            script_1,
-            script_2,
-            value,
-            sequence,
-            lock_time,
-            sighash_type,
-            other_outputs[0].clone(),
-            other_outputs[1].clone(),
-            other_outputs[2].clone(),
-            other_outputs[3].clone(),
-            other_outputs[4].clone(),
-            other_outputs[5].clone(),
-            if_flag,
-            self.input.script.clone().into_bytes(),
-        ])
-    }
-}
-
-pub fn make_keypair<R>(rng: &mut R) -> (SecretKey, PublicKey)
+fn make_keypair<R>(rng: &mut R) -> (SecretKey, PublicKey)
 where
     R: RngCore + CryptoRng,
 {
@@ -1164,4 +963,23 @@ where
     );
 
     (sk, pk)
+}
+
+pub mod transaction_as_string {
+    use elements::encode::serialize_hex;
+    use elements::Transaction;
+    use serde::de::Error;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(a: &Transaction, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&serialize_hex(a))
+    }
+
+    pub fn deserialize<'d, D: Deserializer<'d>>(d: D) -> Result<Transaction, D::Error> {
+        let string = String::deserialize(d)?;
+        let bytes = hex::decode(string).map_err(D::Error::custom)?;
+        let tx = elements::encode::deserialize(&bytes).map_err(D::Error::custom)?;
+
+        Ok(tx)
+    }
 }
