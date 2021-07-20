@@ -32,7 +32,7 @@ if is_repayment {
         1. includes and output that pays the principal + interest to the lender
         2. the sender is the borrower
         return 1
-    else 
+    else
         return 0
 } else {
     //liquidation at expiration
@@ -43,3 +43,14 @@ if is_repayment {
     return 1
 }
 ```
+
+## Releases
+
+We will release every Friday with the intention of frequently pushing out features and enhancements for Project Baru's stream-aligned team to use.
+
+### Steps
+
+1. Update the version number in [Cargo.toml](Cargo.toml) according to SemVer.
+2. Update the [changelog](CHANGELOG.md) and make sure that all breaking changes and new additions have been mentioned.
+3. Generate a GitHub release of the library's master branch.
+4. Publish on [crates.io](https://crates.io) using the `cargo publish` subcommand.
