@@ -12,12 +12,12 @@ description = "Library to facilitate DeFi on Liquid"
 [dependencies]
 anyhow = "1"
 bitcoin_hashes = "0.9.0"
+conquer-once = "0.3"
 elements = { version = "0.17", features = [ "serde-feature" ] }
+elements-miniscript = { git = "http://github.com/ElementsProject/elements-miniscript", features = [ "use-serde" ] }
 env_logger = "0.8.3"
-# estimate_transaction_size = { path = "../estimate_transaction_size" }
 hex = "0.4"
 hmac = "0.10"
-# input = { path = "../input" }
 log = "0.4"
 rust_decimal = "1"
 secp256k1 = { version = "0.20", features = [ "bitcoin_hashes", "rand" ] }

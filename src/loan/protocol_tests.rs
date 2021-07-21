@@ -168,11 +168,6 @@ mod tests {
             .unwrap();
     }
 
-    fn init_logger() {
-        // force enabling log output
-        let _ = env_logger::builder().is_test(true).try_init();
-    }
-
     #[tokio::test]
     async fn lend_and_liquidate() {
         init_logger();
@@ -226,7 +221,7 @@ mod tests {
 
             client.generatetoaddress(1, &miner_address).await.unwrap();
 
-            let timelock = 0;
+            let timelock = client.get_blockcount().await.unwrap() + 2;
 
             let borrower = Borrower0::new(
                 &mut thread_rng(),
@@ -238,7 +233,7 @@ mod tests {
                 address_blinding_sk,
                 collateral_amount,
                 Amount::ONE_SAT,
-                timelock,
+                timelock as u64,
                 bitcoin_asset_id,
                 usdt_asset_id,
             )
@@ -298,7 +293,7 @@ mod tests {
             .await
             .unwrap();
 
-        client.generatetoaddress(1, &miner_address).await.unwrap();
+        client.generatetoaddress(2, &miner_address).await.unwrap();
 
         let liquidation_transaction = lender
             .liquidation_transaction(&mut thread_rng(), &SECP256K1, Amount::from_sat(1))
@@ -308,6 +303,11 @@ mod tests {
             .send_raw_transaction(&liquidation_transaction)
             .await
             .unwrap();
+    }
+
+    fn init_logger() {
+        // force enabling log output
+        let _ = env_logger::builder().is_test(true).try_init();
     }
 
     async fn find_inputs(
