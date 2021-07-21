@@ -23,7 +23,6 @@ use std::str::FromStr;
 
 #[cfg(test)]
 mod protocol_tests;
-mod stack_simulator;
 
 /// Secret key used to produce a signature which proves that an
 /// input's witness stack contains transaction data equivalent to the
