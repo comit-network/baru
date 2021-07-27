@@ -4,19 +4,18 @@ use anyhow::{anyhow, bail, Context, Result};
 use bitcoin_hashes::hex::ToHex;
 use conquer_once::Lazy;
 use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
-use elements::confidential::{Asset, AssetBlindingFactor, ValueBlindingFactor};
+use elements::confidential::{self, Asset, AssetBlindingFactor, ValueBlindingFactor};
 use elements::encode::serialize;
 use elements::secp256k1_zkp::rand::{CryptoRng, RngCore};
 use elements::secp256k1_zkp::{Secp256k1, SecretKey, Signing, Verification, SECP256K1};
 use elements::sighash::SigHashCache;
 use elements::{
-    Address, AddressParams, AssetId, OutPoint, SigHashType, Transaction, TxIn, TxInWitness, TxOut,
-    TxOutSecrets,
+    Address, AddressParams, AssetId, OutPoint, SigHashType, Transaction, TxIn, TxOut, TxOutSecrets,
 };
 use elements_miniscript::descriptor::{CovSatisfier, ElementsTrait};
 use elements_miniscript::miniscript::satisfy::After;
 use elements_miniscript::{Descriptor, DescriptorTrait};
-use secp256k1_zkp::{SurjectionProof, Tag};
+use secp256k1_zkp::{Signature, SurjectionProof, Tag};
 use std::collections::HashMap;
 use std::future::Future;
 use std::str::FromStr;
@@ -42,14 +41,15 @@ static COVENANT_SK: Lazy<SecretKey> = Lazy::new(|| {
 /// transaction which inludes the input itself.
 static COVENANT_PK: &str = "03b9b6059008e3576aad58e05a3a3e37133b05f68cda8535ec097ef4bae564a6af";
 
-/// Generate the miniscript descriptor of the collateral output.
+/// Contract defining the conditions under which the collateral output
+/// can be spent.
 ///
-/// It defines a "liquidation branch" which allows the lender to claim
+/// It has a "liquidation branch" which allows the lender to claim
 /// all the collateral for themself if the `timelock` expires. The
 /// lender must identify themself by providing a signature on
 /// `lender_pk`.
 ///
-/// It also defines a "repayment branch" which allows the borrower to
+/// It also includes a "repayment branch" which allows the borrower to
 /// repay the loan to reclaim the collateral. The borrower must
 /// identify themself by providing a signature on `borrower_pk`. To
 /// ensure that the borrower does indeed repay the loan, the script
@@ -60,21 +60,177 @@ static COVENANT_PK: &str = "03b9b6059008e3576aad58e05a3a3e37133b05f68cda8535ec09
 /// `covenant_pk`, which is only used to verify that the transaction
 /// data on the witness stack matches the transaction which triggered
 /// the call.
-fn collateral_descriptor(
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct CollateralContract {
+    descriptor: Descriptor<PublicKey>,
     borrower_pk: PublicKey,
     lender_pk: PublicKey,
-    timelock: u64,
-    repayment_output: TxOut,
-) -> Result<Descriptor<PublicKey>> {
-    let repayment_output = serialize(&repayment_output).to_hex();
-    let desc = Descriptor::<elements::bitcoin::PublicKey>::from_str(
-        &(format!(
-            "elcovwsh({},or_i(and_v(v:pk({}),after({})),and_v(v:pk({}),outputs_pref({}))))",
-            COVENANT_PK, lender_pk, timelock, borrower_pk, repayment_output,
-        )),
-    )?;
+    timelock: u32, // TODO: Model timelocks as u32
+}
 
-    Ok(desc)
+impl CollateralContract {
+    /// Fill in the collateral contract template with the provided arguments.
+    fn new(
+        borrower_pk: PublicKey,
+        lender_pk: PublicKey,
+        timelock: u64,
+        repayment_output: TxOut,
+    ) -> Result<Self> {
+        let repayment_output = serialize(&repayment_output).to_hex();
+        let descriptor = Descriptor::<elements::bitcoin::PublicKey>::from_str(
+            &(format!(
+                "elcovwsh({},or_i(and_v(v:pk({}),after({})),and_v(v:pk({}),outputs_pref({}))))",
+                COVENANT_PK, lender_pk, timelock, borrower_pk, repayment_output,
+            )),
+        )
+        .context("invalid collateral output descriptor")?;
+
+        Ok(Self {
+            descriptor,
+            borrower_pk,
+            lender_pk,
+            timelock: timelock as u32,
+        })
+    }
+
+    fn address(&self) -> Address {
+        // FIXME: AddressParams should not be hard-coded
+        self.descriptor
+            .address(&AddressParams::ELEMENTS)
+            .expect("descriptor address to exist")
+    }
+
+    fn blinded_address(&self, blinder: secp256k1_zkp::PublicKey) -> Address {
+        self.descriptor
+            .blind_addr(Some(blinder), &AddressParams::ELEMENTS)
+            .expect("descriptor address to exist")
+    }
+
+    async fn satisfy_loan_repayment<S, SF>(
+        &self,
+        transaction: &mut Transaction,
+        input_value: confidential::Value,
+        input_index: u32,
+        identity_signer: S,
+    ) -> Result<()>
+    where
+        S: FnOnce(secp256k1::Message) -> SF,
+        SF: Future<Output = Result<Signature>>,
+    {
+        let descriptor_cov = &self.descriptor.as_cov().expect("covenant descriptor");
+
+        let cov_script = descriptor_cov.cov_script_code();
+        let transaction_cloned = transaction.clone();
+        let cov_sat = CovSatisfier::new_segwitv0(
+            &transaction_cloned,
+            input_index,
+            input_value,
+            &cov_script,
+            SigHashType::All,
+        );
+
+        let cov_pk_sat = {
+            let mut hash_map = HashMap::new();
+            let sighash = cov_sat.segwit_sighash()?;
+            let sighash = elements::secp256k1_zkp::Message::from(sighash);
+
+            let sig = SECP256K1.sign(&sighash, &COVENANT_SK);
+            hash_map.insert(*descriptor_cov.pk(), (sig, SigHashType::All));
+
+            hash_map
+        };
+
+        let ident_pk_sat = {
+            let mut hash_map = HashMap::new();
+
+            let script = &self.descriptor.explicit_script();
+            let sighash = SigHashCache::new(&*transaction).segwitv0_sighash(
+                input_index as usize,
+                &script,
+                input_value,
+                SigHashType::All,
+            );
+            let sighash = elements::secp256k1_zkp::Message::from(sighash);
+
+            let sig = identity_signer(sighash)
+                .await
+                .context("could not sign on behalf of borrower")?;
+            hash_map.insert(self.borrower_pk, (sig, SigHashType::All));
+
+            hash_map
+        };
+
+        self.descriptor.satisfy(
+            &mut transaction.input[input_index as usize],
+            (cov_sat, cov_pk_sat, ident_pk_sat),
+        )?;
+
+        Ok(())
+    }
+
+    async fn satisfy_liquidation<S, SF>(
+        &self,
+        transaction: &mut Transaction,
+        input_value: confidential::Value,
+        input_index: u32,
+        identity_signer: S,
+    ) -> Result<()>
+    where
+        S: FnOnce(secp256k1::Message) -> SF,
+        SF: Future<Output = Result<Signature>>,
+    {
+        let descriptor_cov = &self.descriptor.as_cov().expect("covenant descriptor");
+
+        let cov_script = descriptor_cov.cov_script_code();
+        let transaction_cloned = transaction.clone();
+        let cov_sat = CovSatisfier::new_segwitv0(
+            &transaction_cloned,
+            input_index,
+            input_value,
+            &cov_script,
+            SigHashType::All,
+        );
+
+        let cov_pk_sat = {
+            let mut hash_map = HashMap::new();
+            let sighash = cov_sat.segwit_sighash()?;
+            let sighash = elements::secp256k1_zkp::Message::from(sighash);
+
+            let sig = SECP256K1.sign(&sighash, &COVENANT_SK);
+            hash_map.insert(*descriptor_cov.pk(), (sig, SigHashType::All));
+
+            hash_map
+        };
+
+        let ident_pk_sat = {
+            let mut hash_map = HashMap::new();
+
+            let script = &self.descriptor.explicit_script();
+            let sighash = SigHashCache::new(&*transaction).segwitv0_sighash(
+                input_index as usize,
+                &script,
+                input_value,
+                SigHashType::All,
+            );
+            let sighash = elements::secp256k1_zkp::Message::from(sighash);
+
+            let sig = identity_signer(sighash)
+                .await
+                .context("could not sign on behalf of lender")?;
+            hash_map.insert(self.lender_pk, (sig, SigHashType::All));
+
+            hash_map
+        };
+
+        let after_sat = After(self.timelock as u32);
+
+        self.descriptor.satisfy(
+            &mut transaction.input[input_index as usize],
+            (cov_sat, cov_pk_sat, ident_pk_sat, after_sat),
+        )?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -187,13 +343,13 @@ impl Borrower0 {
             })
             .context("no principal txout")?;
 
-        let collateral_descriptor = collateral_descriptor(
+        let collateral_contract = CollateralContract::new(
             self.keypair.1,
             loan_response.lender_pk,
             loan_response.timelock,
             loan_response.repayment_principal_output.clone(),
         )?;
-        let collateral_address = collateral_descriptor.address(&AddressParams::ELEMENTS)?;
+        let collateral_address = collateral_contract.address();
 
         let collateral_script_pubkey = collateral_address.script_pubkey();
         let collateral_blinding_sk = loan_response.repayment_collateral_input.blinding_key;
@@ -250,7 +406,7 @@ impl Borrower0 {
             keypair: self.keypair,
             loan_transaction: transaction,
             collateral_amount: self.collateral_amount,
-            collateral_descriptor,
+            collateral_contract,
             principal_tx_out_amount,
             address: self.address.clone(),
             repayment_collateral_input: loan_response.repayment_collateral_input,
@@ -269,7 +425,7 @@ pub struct Borrower1 {
     pub loan_transaction: Transaction,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     pub collateral_amount: Amount,
-    collateral_descriptor: Descriptor<PublicKey>,
+    collateral_contract: CollateralContract,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     pub principal_tx_out_amount: Amount,
     address: Address,
@@ -450,59 +606,20 @@ impl Borrower1 {
             output: tx_outs,
         };
 
-        // fulfill collateral input covenant script
-        {
-            let descriptor = self.collateral_descriptor.clone();
-            let descriptor_cov = descriptor.as_cov()?;
-
-            let collateral_value = self.repayment_collateral_input.original_txout.value;
-            let cov_script = descriptor_cov.cov_script_code();
-
-            let cov_sat =
-                CovSatisfier::new_segwitv0(&tx, 1, collateral_value, &cov_script, SigHashType::All);
-
-            let cov_pk_sat = {
-                let mut hash_map = HashMap::new();
-                let sighash = cov_sat.segwit_sighash()?;
-                let sighash = elements::secp256k1_zkp::Message::from(sighash);
-
-                let sig = SECP256K1.sign(&sighash, &COVENANT_SK);
-                hash_map.insert(*descriptor_cov.pk(), (sig, SigHashType::All));
-
-                hash_map
-            };
-
-            let ident_pk_sat = {
-                let mut hash_map = HashMap::new();
-
-                let script = descriptor.explicit_script();
-                let sighash = SigHashCache::new(&tx).segwitv0_sighash(
-                    1,
-                    &script,
-                    collateral_value,
-                    SigHashType::All,
-                );
-                let sighash = elements::secp256k1_zkp::Message::from(sighash);
-
-                let sig = SECP256K1.sign(&sighash, &self.keypair.0);
-                hash_map.insert(self.keypair.1, (sig, SigHashType::All));
-
-                hash_map
-            };
-
-            let (script_witness, _) =
-                descriptor_cov.get_satisfaction((cov_sat, cov_pk_sat, ident_pk_sat))?;
-
-            tx.input[1].witness = TxInWitness {
-                amount_rangeproof: None,
-                inflation_keys_rangeproof: None,
-                script_witness,
-                pegin_witness: vec![],
-            };
-        };
+        // fulfill collateral input contract
+        self.collateral_contract
+            .satisfy_loan_repayment(
+                &mut tx,
+                self.repayment_collateral_input.original_txout.value,
+                1,
+                // TODO: Push ownership (and generation) of secret key outside of the library
+                |message| async move { Ok(SECP256K1.sign(&message, &self.keypair.0)) },
+            )
+            .await
+            .context("could not satisfy collateral input")?;
 
         // sign repayment input of the principal amount
-        let tx = { signer(tx).await? };
+        let tx = signer(tx).await?;
 
         Ok(tx)
     }
@@ -605,15 +722,14 @@ impl Lender0 {
         let (_, lender_pk) = self.keypair;
         let (collateral_blinding_sk, collateral_blinding_pk) = make_keypair(rng);
 
-        let collateral_descriptor = collateral_descriptor(
+        let collateral_contract = CollateralContract::new(
             loan_request.borrower_pk,
             lender_pk,
             loan_request.timelock,
             repayment_principal_output.clone(),
         )
-        .context("could not build collateral descriptor")?;
-        let collateral_address = collateral_descriptor
-            .blind_addr(Some(collateral_blinding_pk.key), &AddressParams::ELEMENTS)?;
+        .context("could not build collateral contract")?;
+        let collateral_address = collateral_contract.blinded_address(collateral_blinding_pk.key);
 
         let inputs_not_last_confidential = inputs
             .iter()
@@ -758,7 +874,7 @@ impl Lender0 {
             address: self.address,
             timelock: loan_request.timelock,
             loan_transaction,
-            collateral_descriptor,
+            collateral_contract,
             collateral_amount: loan_request.collateral_amount,
             repayment_collateral_input,
             repayment_collateral_abf,
@@ -792,7 +908,7 @@ pub struct Lender1 {
     address: Address,
     pub timelock: u64,
     loan_transaction: Transaction,
-    collateral_descriptor: Descriptor<PublicKey>,
+    collateral_contract: CollateralContract,
     collateral_amount: Amount,
     repayment_collateral_input: Input,
     repayment_collateral_abf: AssetBlindingFactor,
@@ -830,7 +946,7 @@ impl Lender1 {
         signer(loan_transaction).await
     }
 
-    pub fn liquidation_transaction<R, C>(
+    pub async fn liquidation_transaction<R, C>(
         &self,
         rng: &mut R,
         secp: &Secp256k1<C>,
@@ -884,64 +1000,16 @@ impl Lender1 {
             output: tx_outs,
         };
 
-        // fulfill collateral input covenant script to liquidate the position
-        {
-            let descriptor = self.collateral_descriptor.clone();
-            let descriptor_cov = descriptor.as_cov()?;
-
-            let collateral_value = self.repayment_collateral_input.original_txout.value;
-            let cov_script = descriptor_cov.cov_script_code();
-
-            let cov_sat = CovSatisfier::new_segwitv0(
-                &liquidation_transaction,
+        // fulfill collateral input contract
+        self.collateral_contract
+            .satisfy_liquidation(
+                &mut liquidation_transaction,
+                self.repayment_collateral_input.original_txout.value,
                 0,
-                collateral_value,
-                &cov_script,
-                SigHashType::All,
-            );
-
-            let cov_pk_sat = {
-                let mut hash_map = HashMap::new();
-                let sighash = cov_sat.segwit_sighash()?;
-
-                let sig = SECP256K1.sign(
-                    &elements::secp256k1_zkp::Message::from(sighash),
-                    &COVENANT_SK,
-                );
-                hash_map.insert(*descriptor_cov.pk(), (sig, SigHashType::All));
-
-                hash_map
-            };
-
-            let ident_pk_sat = {
-                let mut hash_map = HashMap::new();
-
-                let script = descriptor.explicit_script();
-                let sighash = SigHashCache::new(&liquidation_transaction).segwitv0_sighash(
-                    0,
-                    &script,
-                    collateral_value,
-                    SigHashType::All,
-                );
-                let sighash = elements::secp256k1_zkp::Message::from(sighash);
-
-                let sig = SECP256K1.sign(&sighash, &self.keypair.0);
-                hash_map.insert(self.keypair.1, (sig, SigHashType::All));
-
-                hash_map
-            };
-
-            // TODO: Model timelocks as u32
-            let after_sat = After(self.timelock as u32);
-
-            let (script_witness, _) = self.collateral_descriptor.get_satisfaction((
-                cov_sat,
-                cov_pk_sat,
-                ident_pk_sat,
-                after_sat,
-            ))?;
-            liquidation_transaction.input[0].witness.script_witness = script_witness;
-        }
+                |message| async move { Ok(SECP256K1.sign(&message, &self.keypair.0)) },
+            )
+            .await
+            .context("could not satisfy collateral input")?;
 
         Ok(liquidation_transaction)
     }

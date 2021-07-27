@@ -297,6 +297,7 @@ mod tests {
 
         let liquidation_transaction = lender
             .liquidation_transaction(&mut thread_rng(), &SECP256K1, Amount::from_sat(1))
+            .await
             .unwrap();
 
         client
