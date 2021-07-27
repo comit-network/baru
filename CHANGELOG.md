@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     It takes a message of the form `price:timestamp` and an oracle's signature on the hash of the message, so that a _lender_ can unilaterally liquidate the loan if the `price` falls below a threshold and the `timestamp` is past a certain time.
   - `Lender0` constructor now requires blinding key of lender address and an oracle public key.
 
+### Changed
+
+- `loan::LoanResponse` fields:
+  - Made `timelock` private, but accessible via `LoanResponse::collateral_contract(&self).timelock()`.
+  - Made `transaction` private, accessible via getter.
+  - Made `collateral_amount` private, but accessible via getter.
+- `loan::Borrower1` fields:
+  - Made `loan_transaction` private, but accessible via getter.
+  - Made `collateral_amount` private, but accessible via getter.
+- `loan::Lender1` fields:
+  - Made `timelock` private, but accessible via getter.
+- `fn liquidation_transaction()` API on `Lender1` is now `async`.
+
+
 ## [0.1.1] - 2021-07-23
 
 ## [0.1.0] - 2021-07-16

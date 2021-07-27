@@ -426,7 +426,7 @@ impl CollateralContract {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoanRequest {
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
-    pub collateral_amount: Amount,
+    collateral_amount: Amount,
     collateral_inputs: Vec<Input>,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     fee_sats_per_vbyte: Amount,
@@ -435,15 +435,29 @@ pub struct LoanRequest {
     borrower_address: Address,
 }
 
+impl LoanRequest {
+    /// Get a copy of the collateral amount.
+    pub fn collateral_amount(&self) -> Amount {
+        self.collateral_amount
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoanResponse {
     // TODO: Use this where needed!
     #[serde(with = "transaction_as_string")]
-    pub transaction: Transaction,
+    transaction: Transaction,
     collateral_contract: CollateralContract,
     repayment_collateral_input: Input,
     repayment_collateral_abf: AssetBlindingFactor,
     repayment_collateral_vbf: ValueBlindingFactor,
+}
+
+impl LoanResponse {
+    /// Get a reference to the loan transaction.
+    pub fn transaction(&self) -> &Transaction {
+        &self.transaction
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -605,12 +619,12 @@ impl Borrower0 {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Borrower1 {
     keypair: (SecretKey, PublicKey),
-    pub loan_transaction: Transaction,
+    loan_transaction: Transaction,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
-    pub collateral_amount: Amount,
+    collateral_amount: Amount,
     collateral_contract: CollateralContract,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
-    pub principal_amount: Amount,
+    principal_amount: Amount,
     address: Address,
     /// Loan collateral expressed as an input for constructing the
     /// loan repayment transaction.
@@ -808,6 +822,26 @@ impl Borrower1 {
         let tx = signer(tx).await?;
 
         Ok(tx)
+    }
+
+    /// Get a copy of the collateral amount.
+    pub fn collateral_amount(&self) -> Amount {
+        self.collateral_amount
+    }
+
+    /// Get a copy of the principal amount.
+    pub fn principal_amount(&self) -> Amount {
+        self.principal_amount
+    }
+
+    /// Get a reference to the collateral contract.
+    pub fn collateral_contract(&self) -> &CollateralContract {
+        &self.collateral_contract
+    }
+
+    /// Get a reference to the loan transaction.
+    pub fn loan_transaction(&self) -> &Transaction {
+        &self.loan_transaction
     }
 }
 
