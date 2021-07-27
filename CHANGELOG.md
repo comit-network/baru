@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Dynamic liquidation branch to the loan protocol:
+  - New `async fn dynamic_liquidation_transaction()` API on `Lender1`.
+    It takes a message of the form `price:timestamp` and an oracle's signature on the hash of the message, so that a _lender_ can unilaterally liquidate the loan if the `price` falls below a threshold and the `timestamp` is past a certain time.
+  - `Lender0` constructor now requires blinding key of lender address and an oracle public key.
+
 ## [0.1.1] - 2021-07-23
 
 ## [0.1.0] - 2021-07-16
