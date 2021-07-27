@@ -15,11 +15,15 @@ mod tests {
     };
     use elements_harness::Elementsd;
     use elements_rpc::ElementsRpc;
+    use rand::{CryptoRng, RngCore, SeedableRng};
+    use rand_chacha::ChaChaRng;
     use testcontainers::clients::Cli;
 
     #[tokio::test]
     async fn borrow_and_repay() {
         init_logger();
+
+        let mut rng = ChaChaRng::seed_from_u64(0);
 
         let tc_client = Cli::default();
         let (client, _container) = {
@@ -43,7 +47,7 @@ mod tests {
         client.generatetoaddress(10, &miner_address).await.unwrap();
 
         let (borrower, borrower_wallet) = {
-            let mut wallet = Wallet::new();
+            let mut wallet = Wallet::new(&mut rng);
 
             let collateral_amount = Amount::ONE_BTC;
 
@@ -74,7 +78,7 @@ mod tests {
             let timelock = 10;
 
             let borrower = Borrower0::new(
-                &mut thread_rng(),
+                &mut rng,
                 {
                     let wallet = wallet.clone();
                     |amount, asset| async move { wallet.find_inputs(asset, amount).await }
@@ -96,13 +100,8 @@ mod tests {
         let (lender, _lender_address) = {
             let address = client.get_new_segwit_confidential_address().await.unwrap();
 
-            let lender = Lender0::new(
-                &mut thread_rng(),
-                bitcoin_asset_id,
-                usdt_asset_id,
-                address.clone(),
-            )
-            .unwrap();
+            let lender =
+                Lender0::new(&mut rng, bitcoin_asset_id, usdt_asset_id, address.clone()).unwrap();
 
             (lender, address)
         };
@@ -111,7 +110,7 @@ mod tests {
 
         let lender = lender
             .interpret(
-                &mut thread_rng(),
+                &mut rng,
                 &SECP256K1,
                 {
                     let client = client.clone();
@@ -150,7 +149,7 @@ mod tests {
 
         let loan_repayment_transaction = borrower
             .loan_repayment_transaction(
-                &mut thread_rng(),
+                &mut rng,
                 &SECP256K1,
                 {
                     let borrower_wallet = borrower_wallet.clone();
@@ -171,6 +170,8 @@ mod tests {
     #[tokio::test]
     async fn lend_and_liquidate() {
         init_logger();
+
+        let mut rng = ChaChaRng::seed_from_u64(0);
 
         let tc_client = Cli::default();
         let (client, _container) = {
@@ -193,7 +194,7 @@ mod tests {
         client.generatetoaddress(10, &miner_address).await.unwrap();
 
         let (borrower, borrower_wallet) = {
-            let mut wallet = Wallet::new();
+            let mut wallet = Wallet::new(&mut rng);
 
             let collateral_amount = Amount::ONE_BTC;
 
@@ -224,7 +225,7 @@ mod tests {
             let timelock = client.get_blockcount().await.unwrap() + 2;
 
             let borrower = Borrower0::new(
-                &mut thread_rng(),
+                &mut rng,
                 {
                     let wallet = wallet.clone();
                     |amount, asset| async move { wallet.find_inputs(asset, amount).await }
@@ -246,13 +247,8 @@ mod tests {
         let (lender, _lender_address) = {
             let address = client.get_new_segwit_confidential_address().await.unwrap();
 
-            let lender = Lender0::new(
-                &mut thread_rng(),
-                bitcoin_asset_id,
-                usdt_asset_id,
-                address.clone(),
-            )
-            .unwrap();
+            let lender =
+                Lender0::new(&mut rng, bitcoin_asset_id, usdt_asset_id, address.clone()).unwrap();
 
             (lender, address)
         };
@@ -261,7 +257,7 @@ mod tests {
 
         let lender = lender
             .interpret(
-                &mut thread_rng(),
+                &mut rng,
                 &SECP256K1,
                 {
                     let client = client.clone();
@@ -296,7 +292,7 @@ mod tests {
         client.generatetoaddress(2, &miner_address).await.unwrap();
 
         let liquidation_transaction = lender
-            .liquidation_transaction(&mut thread_rng(), &SECP256K1, Amount::from_sat(1))
+            .liquidation_transaction(&mut rng, &SECP256K1, Amount::from_sat(1))
             .await
             .unwrap();
 
@@ -364,9 +360,12 @@ mod tests {
     }
 
     impl Wallet {
-        pub fn new() -> Self {
-            let (sk, pk) = make_keypair(&mut thread_rng());
-            let (blinder_sk, blinder_pk) = make_keypair(&mut thread_rng());
+        pub fn new<R>(rng: &mut R) -> Self
+        where
+            R: RngCore + CryptoRng,
+        {
+            let (sk, pk) = make_keypair(rng);
+            let (blinder_sk, blinder_pk) = make_keypair(rng);
 
             let address = Address::p2wpkh(&pk, Some(blinder_pk.key), &AddressParams::ELEMENTS);
 

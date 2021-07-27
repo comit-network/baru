@@ -6,7 +6,6 @@ use conquer_once::Lazy;
 use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
 use elements::confidential::{self, Asset, AssetBlindingFactor, ValueBlindingFactor};
 use elements::encode::serialize;
-use elements::secp256k1_zkp::rand::{CryptoRng, RngCore};
 use elements::secp256k1_zkp::{Secp256k1, SecretKey, Signing, Verification, SECP256K1};
 use elements::sighash::SigHashCache;
 use elements::{
@@ -15,6 +14,7 @@ use elements::{
 use elements_miniscript::descriptor::{CovSatisfier, ElementsTrait};
 use elements_miniscript::miniscript::satisfy::After;
 use elements_miniscript::{Descriptor, DescriptorTrait};
+use rand::{CryptoRng, RngCore};
 use secp256k1_zkp::{Signature, SurjectionProof, Tag};
 use std::collections::HashMap;
 use std::future::Future;
