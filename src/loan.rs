@@ -117,12 +117,11 @@ impl CollateralContract {
         // `covenant_pk`, which is only used to verify that the transaction
         // data on the witness stack matches the transaction which triggered
         // the call.
-        let descriptor = Descriptor::<elements::bitcoin::PublicKey>::from_str(
-            &(format!(
-                "elcovwsh({},or_i(and_v(v:pk({}),after({})),and_v(v:pk({}),outputs_pref({}))))",
-                COVENANT_PK, lender_pk, timelock, borrower_pk, repayment_principal_output_as_hex,
-            )),
+        let descriptor: Descriptor<elements::bitcoin::PublicKey> = format!(
+            "elcovwsh({},or_i(and_v(v:pk({}),after({})),and_v(v:pk({}),outputs_pref({}))))",
+            COVENANT_PK, lender_pk, timelock, borrower_pk, repayment_principal_output_as_hex,
         )
+        .parse()
         .context("invalid collateral output descriptor")?;
 
         let dynamic_liquidation_branch = Builder::new()
