@@ -34,7 +34,7 @@ mod protocol_tests;
 /// It also defines a "repayment branch" which allows the borrower to
 /// repay the loan to reclaim the collateral. The borrower must
 /// identify themself by providing a signature on `borrower_pk`. To
-/// ensure that the borrower does indeed repay the loan, the script
+/// ensure that the borrower does indeed repay the loan, the ript
 /// will check that the spending transaction has the
 /// `repayment_output` as vout 0.
 ///

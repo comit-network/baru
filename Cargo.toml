@@ -30,5 +30,6 @@ thiserror = "1"
 [dev-dependencies]
 elements-harness = { git = "https://github.com/comit-network/elements-harness" }
 elements-rpc = { path = "./elements-rpc" }
+#elements-consensus = { git = "https://github.com/comit-network/rust-elements-consensus"}
 testcontainers = "0.12"
 tokio = { version = "1", default-features = false, features = [ "macros" ] }

@@ -5,6 +5,7 @@ use elements::secp256k1_zkp::{SecretKey, SECP256K1};
 
 pub mod input;
 pub mod loan;
+pub mod option;
 pub mod swap;
 
 mod estimate_transaction_size;
