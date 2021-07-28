@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `loan::Lender1` fields:
   - Made `timelock` private, but accessible via getter.
 - `fn liquidation_transaction()` API on `Lender1` is now `async`.
-
+- Model the collateral contract's timelock as a `u32`.
 
 ## [0.1.1] - 2021-07-23
 

@@ -245,7 +245,7 @@ mod tests {
                 address_blinding_sk,
                 collateral_amount,
                 Amount::ONE_SAT,
-                timelock as u64,
+                timelock,
                 bitcoin_asset_id,
                 usdt_asset_id,
             )
@@ -394,7 +394,7 @@ mod tests {
                 address_blinding_sk,
                 collateral_amount,
                 Amount::ONE_SAT,
-                timelock as u64,
+                timelock,
                 bitcoin_asset_id,
                 usdt_asset_id,
             )
