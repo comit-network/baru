@@ -122,7 +122,7 @@ impl CollateralContract {
             COVENANT_PK, lender_pk, timelock, borrower_pk, repayment_principal_output_as_hex,
         )
         .parse()
-        .context("invalid collateral output descriptor")?;
+        .expect("valid collateral output descriptor");
 
         let dynamic_liquidation_branch = Builder::new()
             // check that the lender authorises the spend
@@ -1464,5 +1464,22 @@ pub mod transaction_as_string {
         let tx = elements::encode::deserialize(&bytes).map_err(D::Error::custom)?;
 
         Ok(tx)
+    }
+}
+
+#[cfg(test)]
+mod constant_tests {
+    use super::{COVENANT_PK, COVENANT_SK};
+    use elements::bitcoin::{PrivateKey, PublicKey};
+    use secp256k1_zkp::SECP256K1;
+
+    #[test]
+    fn covenant_pk_is_the_public_key_of_covenant_sk() {
+        let pk = PublicKey::from_private_key(
+            SECP256K1,
+            &PrivateKey::new(*COVENANT_SK, elements::bitcoin::Network::Regtest),
+        );
+
+        assert_eq!(format!("{}", pk), COVENANT_PK)
     }
 }
