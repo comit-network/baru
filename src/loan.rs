@@ -103,7 +103,7 @@ impl CollateralContract {
     fn new(
         borrower_pk: PublicKey,
         lender_pk: PublicKey,
-        timelock: u64,
+        timelock: u32,
         (repayment_principal_output, repayment_principal_output_blinder): (TxOut, SecretKey),
         oracle_pk: PublicKey,
         min_price_btc: u64,
@@ -198,7 +198,7 @@ impl CollateralContract {
             lender_pk,
             repayment_principal_output,
             repayment_principal_output_blinder,
-            timelock: timelock as u32, // TODO: Model timelocks as u32
+            timelock,
             oracle_pk,
             min_price_btc,
             min_timestamp,
@@ -256,7 +256,7 @@ impl CollateralContract {
                 self.lender_pk,
             )
             .await?;
-        let after_sat = After(self.timelock as u32);
+        let after_sat = After(self.timelock);
 
         self.satisfy(
             (satisfiers, after_sat),
@@ -431,7 +431,7 @@ pub struct LoanRequest {
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     fee_sats_per_vbyte: Amount,
     borrower_pk: PublicKey,
-    timelock: u64,
+    timelock: u32,
     borrower_address: Address,
 }
 
@@ -470,7 +470,7 @@ pub struct Borrower0 {
     collateral_inputs: Vec<Input>,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     fee_sats_per_vbyte: Amount,
-    timelock: u64,
+    timelock: u32,
     bitcoin_asset_id: AssetId,
     usdt_asset_id: AssetId,
 }
@@ -484,7 +484,7 @@ impl Borrower0 {
         address_blinding_sk: SecretKey,
         collateral_amount: Amount,
         fee_sats_per_vbyte: Amount,
-        timelock: u64,
+        timelock: u32,
         bitcoin_asset_id: AssetId,
         usdt_asset_id: AssetId,
     ) -> Result<Self>
@@ -1188,7 +1188,7 @@ struct LoanAmounts {
 pub struct Lender1 {
     keypair: (SecretKey, PublicKey),
     address: Address,
-    timelock: u64,
+    timelock: u32,
     loan_transaction: Transaction,
     collateral_contract: CollateralContract,
     collateral_amount: Amount,
@@ -1274,7 +1274,7 @@ impl Lender1 {
 
         let mut liquidation_transaction = Transaction {
             version: 2,
-            lock_time: self.timelock as u32,
+            lock_time: self.timelock,
             input: tx_ins,
             output: tx_outs,
         };
