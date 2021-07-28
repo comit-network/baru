@@ -1,0 +1,44 @@
+# Live edit this at http://magjac.com/graphviz-visual-editor/?dot=digraph%20call_option%20%7B%0A%09node%20%5Bshape%3Drecord%5D%3B%0A%09rankdir%3DLR%3B%0A%0A%09subgraph%20cluster_bob_fund%20%7B%0A%09%09btc_fund_out%3B%0A%09%09label%20%3D%20%22Bob%20fund%20transaction%22%0A%09%7D%0A%0A%09subgraph%20cluster_alice_premium%20%7B%0A%09%09usdt_premium_fund_out%3B%0A%09%09label%20%3D%20%22Alice%20pay%20premium%20transaction%22%0A%09%7D%0A%0A%09subgraph%20cluster_option%20%7B%0A%09%09btc_fund_in%20-%3E%20bob_change_out%3B%0A%09%09btc_fund_in%20-%3E%20option_contract_out%3B%0A%09%09btc_fund_in%20-%3E%20fee_out%3B%0A%0A%09%09usdt_fund_in%20-%3E%20bob_premium_out%3B%0A%0A%09%09label%20%3D%20%22Option%20transaction%22%0A%09%7D%0A%0A%09subgraph%20cluster_fund_exercise%20%7B%0A%09%09usdt_fund_out%3B%0A%09%09label%20%3D%20%22Alice%20fund%20transaction%22%0A%09%7D%0A%0A%09subgraph%20cluster_exercise%20%7B%0A%09%09option_contract_in%20-%3E%20alice_btc_out%3B%0A%09%09alice_strike_in%20-%3E%20bob_usdt_out%3B%20%2F%2F%20Presence%20of%20this%20is%20enforced%20through%20the%20covenant%20script%20in%20%60option_contract_out%60.%0A%0A%09%09label%20%3D%20%22Exercise%20transaction%22%0A%09%7D%0A%0A%09btc_fund_out%20-%3E%20btc_fund_in%3B%0A%09usdt_premium_fund_out%20-%3E%20usdt_fund_in%3B%0A%09option_contract_out%20-%3E%20option_contract_in%20%5Blabel%20%3D%20%22and_v%28after%28option_duration%29%2Cand_v%28v%3Apk%28alice%29%2Coutputs_pref%28alice_btc_out%2Cbob_usdt_out%29%29%29%22%5D%3B%20%2F%2F%20This%20script%20is%20untested.%0A%09usdt_fund_out%20-%3E%20alice_strike_in%3B%0A%7D%0A%0A
+# Please update the link if you make any changes :)
+
+digraph exercise_call_option {
+	node [shape=record];
+	rankdir=LR;
+
+	subgraph cluster_bob_fund {
+		btc_fund_out;
+		label = "Bob fund transaction"
+	}
+
+	subgraph cluster_alice_premium {
+		usdt_premium_fund_out;
+		label = "Alice pay premium transaction"
+	}
+
+	subgraph cluster_option {
+		btc_fund_in -> bob_change_out;
+		btc_fund_in -> option_contract_out;
+		btc_fund_in -> fee_out;
+
+		usdt_fund_in -> bob_premium_out;
+
+		label = "Option transaction"
+	}
+
+	subgraph cluster_fund_exercise {
+		usdt_fund_out;
+		label = "Alice fund transaction"
+	}
+
+	subgraph cluster_exercise {
+		option_contract_in -> alice_btc_out;
+		alice_strike_in -> bob_usdt_out; // Presence of this is enforced through the covenant script in `option_contract_out`.
+
+		label = "Exercise transaction"
+	}
+
+	btc_fund_out -> btc_fund_in;
+	usdt_premium_fund_out -> usdt_fund_in;
+	option_contract_out -> option_contract_in [label = "and_v(after(option_duration),and_v(v:pk(alice),outputs_pref(alice_btc_out,bob_usdt_out)))"]; // This script is untested.
+	usdt_fund_out -> alice_strike_in;
+}
