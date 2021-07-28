@@ -377,6 +377,11 @@ impl CollateralContract {
     /// Satisfy the covenant descriptor based on the satisfier
     /// provided, and modify the value returned by
     /// `elements-miniscript` to account for the rest of the contract.
+    ///
+    /// As you can see from the suspicious code below, this is
+    /// extremely hacky. We would like to just use
+    /// `elements-minscript` but it is not (yet) possible to express
+    /// all of the spending conditions we want.
     fn satisfy<S>(&self, satisfier: S, input_witness: &mut TxInWitness) -> Result<()>
     where
         S: Satisfier<PublicKey>,
