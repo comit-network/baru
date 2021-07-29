@@ -47,12 +47,7 @@ jobs:
           override: true
           toolchain: stable
 
-      - name: Cache target directory
-        uses: actions/cache@v2
-        if: matrix.os != 'macos-latest'
-        with:
-          path: target
-          key: ${{ matrix.os }}-target-directory-${{ hashFiles('Cargo.lock') }}-v2
+      - uses: Swatinem/rust-cache@v1.3.0
 
       - name: Cargo test (all workspace)
         if: matrix.os == 'ubuntu-latest'
