@@ -82,11 +82,6 @@ pub struct CollateralContract {
     /// This is the only part of the script which is included in the
     /// transaction sighash which is signed with `COVENANT_SK`.
     ///
-    /// In a regular `CovenantDescriptor` this is just
-    /// `OP_CHECKSIGVERIFY` and `OP_CHECKSIGFROMSTACK`. In our case,
-    /// it's `OP_CHECKSIGVERIFY`, `OP_CHECKSIGFROMSTACK` and
-    /// `OP_ENDIF`.
-    cov_script: Script,
     borrower_pk: PublicKey,
     lender_pk: PublicKey,
     repayment_principal_output: TxOut,
@@ -99,6 +94,15 @@ pub struct CollateralContract {
 }
 
 impl CollateralContract {
+    /// The bytes of the Script to be included in the sighash which is signed to
+    /// satisfy the covenant descriptor.
+    ///
+    /// In a regular `CovenantDescriptor` this is just
+    /// `OP_CHECKSIGVERIFY` and `OP_CHECKSIGFROMSTACK`. In our case,
+    /// it's `OP_CHECKSIGVERIFY`, `OP_CHECKSIGFROMSTACK` and
+    /// `OP_ENDIF`.
+    const COV_SCRIPT_BYTES: [u8; 3] = [0xad, 0xc1, 0x68];
+
     /// Fill in the collateral contract template with the provided arguments.
     fn new(
         borrower_pk: PublicKey,
@@ -183,16 +187,9 @@ impl CollateralContract {
             Script::from(script)
         };
 
-        let cov_script = Builder::new()
-            .push_opcode(OP_CHECKSIGVERIFY)
-            .push_opcode(OP_CHECKSIGFROMSTACK)
-            .push_opcode(OP_ENDIF)
-            .into_script();
-
         Ok(Self {
             descriptor,
             raw_script,
-            cov_script,
             borrower_pk,
             lender_pk,
             repayment_principal_output,
@@ -216,6 +213,7 @@ impl CollateralContract {
         SF: Future<Output = Result<Signature>>,
     {
         let transaction_cloned = transaction.clone();
+        let cov_script = Script::from(Self::COV_SCRIPT_BYTES.to_vec());
         let satisfiers = self
             .descriptor_satisfiers(
                 identity_signer,
@@ -223,6 +221,7 @@ impl CollateralContract {
                 input_value,
                 input_index,
                 self.borrower_pk,
+                &cov_script,
             )
             .await?;
 
@@ -246,6 +245,7 @@ impl CollateralContract {
         SF: Future<Output = Result<Signature>>,
     {
         let transaction_cloned = transaction.clone();
+        let cov_script = Script::from(Self::COV_SCRIPT_BYTES.to_vec());
         let satisfiers = self
             .descriptor_satisfiers(
                 identity_signer,
@@ -253,6 +253,7 @@ impl CollateralContract {
                 input_value,
                 input_index,
                 self.lender_pk,
+                &cov_script,
             )
             .await?;
         let after_sat = After(self.timelock);
@@ -324,6 +325,7 @@ impl CollateralContract {
         input_value: confidential::Value,
         input_index: u32,
         identity_pk: PublicKey,
+        cov_script: &'a Script,
     ) -> Result<impl Satisfier<PublicKey> + 'a>
     where
         S: FnOnce(secp256k1::Message) -> SF,
@@ -331,7 +333,6 @@ impl CollateralContract {
     {
         let descriptor_cov = &self.descriptor.as_cov().expect("covenant descriptor");
 
-        let cov_script = &self.cov_script;
         let cov_sat = CovSatisfier::new_segwitv0(
             &transaction,
             input_index,
@@ -1474,9 +1475,7 @@ pub mod transaction_as_string {
 
 #[cfg(test)]
 mod constant_tests {
-    use super::{COVENANT_PK, COVENANT_SK};
-    use elements::bitcoin::{PrivateKey, PublicKey};
-    use secp256k1_zkp::SECP256K1;
+    use super::*;
 
     #[test]
     fn covenant_pk_is_the_public_key_of_covenant_sk() {
@@ -1486,5 +1485,19 @@ mod constant_tests {
         );
 
         assert_eq!(format!("{}", pk), COVENANT_PK)
+    }
+
+    #[test]
+    fn cov_script_bytes_represents_correct_script() {
+        use elements::opcodes::all::*;
+
+        let expected = Builder::new()
+            .push_opcode(OP_CHECKSIGVERIFY)
+            .push_opcode(OP_CHECKSIGFROMSTACK)
+            .push_opcode(OP_ENDIF)
+            .into_script();
+        let actual = Script::from(CollateralContract::COV_SCRIPT_BYTES.to_vec());
+
+        assert_eq!(actual, expected);
     }
 }
