@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2021-07-30
+
 ### Added
 
 - Dynamic liquidation branch to the loan protocol:
@@ -39,5 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Loan protocol and swap libraries originally developed in [Project Waves](https://github.com/comit-network/waves).
 
-[Unreleased]: https://github.com/comit-network/baru/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/comit-network/baru/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/comit-network/baru/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/comit-network/baru/releases/tag/0.1.0
