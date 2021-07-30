@@ -3,7 +3,7 @@ members = [ "elements-rpc" ]
 
 [package]
 name = "baru"
-version = "0.1.1"
+version = "0.1.0"
 authors = [ "CoBloX Team <team@coblox.tech>" ]
 edition = "2018"
 license-file = "LICENSE"
@@ -13,8 +13,8 @@ description = "Library to facilitate DeFi on Liquid"
 anyhow = "1"
 bitcoin_hashes = "0.9.0"
 conquer-once = "0.3"
-elements = { version = "0.17", features = [ "serde-feature" ] }
-elements-miniscript = { git = "http://github.com/ElementsProject/elements-miniscript", features = [ "use-serde" ] }
+elements = { version = "0.18", features = [ "serde-feature" ] }
+elements-miniscript = { version = "0.1", features = [ "use-serde" ] }
 env_logger = "0.8.3"
 hex = "0.4"
 hmac = "0.10"
@@ -29,7 +29,7 @@ sha2 = "0.9"
 thiserror = "1"
 
 [dev-dependencies]
-elements-harness = { git = "https://github.com/comit-network/elements-harness" }
+elements-harness = { git = "https://github.com/comit-network/elements-harness", rev = "0c28948c124d68e828e0f27c9202ba278dc04421" }
 elements-rpc = { path = "./elements-rpc" }
 rand_chacha = "0.1"
 testcontainers = "0.12"
