@@ -286,7 +286,7 @@ impl CollateralContract {
         let script = &self.raw_script;
         let sighash = SigHashCache::new(&*transaction).segwitv0_sighash(
             input_index as usize,
-            &script,
+            script,
             input_value,
             SigHashType::All,
         );
@@ -334,10 +334,10 @@ impl CollateralContract {
         let descriptor_cov = &self.descriptor.as_cov().expect("covenant descriptor");
 
         let cov_sat = CovSatisfier::new_segwitv0(
-            &transaction,
+            transaction,
             input_index,
             input_value,
-            &cov_script,
+            cov_script,
             SigHashType::All,
         );
 
@@ -358,7 +358,7 @@ impl CollateralContract {
             let script = &self.raw_script;
             let sighash = SigHashCache::new(&*transaction).segwitv0_sighash(
                 input_index as usize,
-                &script,
+                script,
                 input_value,
                 SigHashType::All,
             );
@@ -1443,7 +1443,7 @@ where
 {
     let sk = SecretKey::new(rng);
     let pk = PublicKey::from_private_key(
-        &SECP256K1,
+        SECP256K1,
         &PrivateKey {
             compressed: true,
             network: Network::Regtest,

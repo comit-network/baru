@@ -87,7 +87,7 @@ async fn collaborative_create_and_sign() {
     .unwrap();
 
     let alice = Actor::new(
-        &SECP256K1,
+        SECP256K1,
         vec![Input {
             txin: input_alice.0,
             original_txout: input_alice.1.clone(),
@@ -100,7 +100,7 @@ async fn collaborative_create_and_sign() {
     .unwrap();
 
     let bob = Actor::new(
-        &SECP256K1,
+        SECP256K1,
         vec![Input {
             txin: input_bob.0,
             original_txout: input_bob.1.clone(),
@@ -129,7 +129,7 @@ async fn collaborative_create_and_sign() {
                     .context("transaction does not contain input")?;
 
                 tx.input[input_index_1].witness.script_witness = sign_with_key(
-                    &SECP256K1,
+                    SECP256K1,
                     &mut SigHashCache::new(&tx),
                     input_index_1,
                     &fund_sk_bob,
@@ -153,7 +153,7 @@ async fn collaborative_create_and_sign() {
                 .context("transaction does not contain input")?;
 
             tx.input[input_index].witness.script_witness = sign_with_key(
-                &SECP256K1,
+                SECP256K1,
                 &mut SigHashCache::new(&tx),
                 input_index,
                 &fund_sk_alice,
@@ -213,7 +213,7 @@ async fn move_output_to_wallet(
     let asset_id = previous_output_secrets.asset;
     let (output, _, _) = TxOut::new_last_confidential(
         &mut thread_rng(),
-        &SECP256K1,
+        SECP256K1,
         amount_out.as_sat(),
         move_address,
         asset_id,
@@ -231,7 +231,7 @@ async fn move_output_to_wallet(
     };
 
     let previous_output_pk = PublicKey::from_private_key(
-        &SECP256K1,
+        SECP256K1,
         &PrivateKey {
             compressed: true,
             network: Network::Regtest,
@@ -288,7 +288,7 @@ fn extract_input(tx: &Transaction, address: Address) -> Result<(OutPoint, TxOut)
 fn make_keypair() -> (SecretKey, PublicKey) {
     let sk = SecretKey::new(&mut thread_rng());
     let pk = PublicKey::from_private_key(
-        &SECP256K1,
+        SECP256K1,
         &PrivateKey {
             compressed: true,
             network: Network::Regtest,

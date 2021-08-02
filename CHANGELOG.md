@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2021-07-30
+
 ### Added
 
 - Dynamic liquidation branch to the loan protocol:
@@ -28,7 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fn liquidation_transaction()` API on `Lender1` is now `async`.
 - Model the collateral contract's timelock as a `u32`.
 
-## [0.1.1] - 2021-07-23
+### Fixed
+
+- Squashed an [elusive bug](https://github.com/comit-network/baru/issues/35) preventing users from building version `0.1.0` of this library.
+  This required updating `rust-elements` to version `0.18`.
 
 ## [0.1.0] - 2021-07-16
 
@@ -36,6 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Loan protocol and swap libraries originally developed in [Project Waves](https://github.com/comit-network/waves).
 
-[Unreleased]: https://github.com/comit-network/baru/compare/0.1.1...HEAD
-[0.1.1]: https://github.com/comit-network/baru/compare/0.1.0...0.1.1
+[Unreleased]: https://github.com/comit-network/baru/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/comit-network/baru/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/comit-network/baru/releases/tag/0.1.0
