@@ -1,10 +1,10 @@
 [workspace]
-members = [ "elements-rpc" ]
+members = ["elements-rpc"]
 
 [package]
 name = "baru"
 version = "0.2.0"
-authors = [ "CoBloX Team <team@coblox.tech>" ]
+authors = ["CoBloX Team <team@coblox.tech>"]
 edition = "2018"
 license-file = "LICENSE"
 description = "Library to facilitate DeFi on Liquid"
@@ -13,18 +13,18 @@ description = "Library to facilitate DeFi on Liquid"
 anyhow = "1"
 bitcoin_hashes = "0.9.0"
 conquer-once = "0.3"
-elements = { version = "0.18", features = [ "serde-feature" ] }
-elements-miniscript = { version = "0.1", features = [ "use-serde" ] }
+elements = { version = "0.18", features = ["serde-feature"] }
+elements-miniscript = { version = "0.1", features = ["use-serde"] }
 env_logger = "0.8.3"
 hex = "0.4"
 hmac = "0.10"
 log = "0.4"
 rand = "0.6"
 rust_decimal = "1"
-secp256k1 = { version = "0.20", features = [ "bitcoin_hashes", "rand" ] }
+secp256k1 = { version = "0.20", features = ["bitcoin_hashes", "rand"] }
 # TODO: See if we can remove this direct dependency
-secp256k1-zkp = { version = "0.4", features = [ "global-context", "hashes" ] }
-serde = { version = "1", features = [ "derive" ] }
+secp256k1-zkp = { version = "0.4", features = ["global-context", "hashes"] }
+serde = { version = "1", features = ["derive"] }
 sha2 = "0.9"
 thiserror = "1"
 
@@ -33,4 +33,4 @@ elements-harness = { git = "https://github.com/comit-network/elements-harness", 
 elements-rpc = { path = "./elements-rpc" }
 rand_chacha = "0.1"
 testcontainers = "0.12"
-tokio = { version = "1", default-features = false, features = [ "macros" ] }
+tokio = { version = "1", default-features = false, features = ["macros"] }

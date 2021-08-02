@@ -1,19 +1,19 @@
 [package]
 name = "elements-rpc"
 version = "0.1.0"
-authors = [ "CoBloX Team <team@coblox.tech>" ]
+authors = ["CoBloX Team <team@coblox.tech>"]
 edition = "2018"
 publish = false
 
 [dependencies]
 anyhow = "1.0"
 bitcoin_hashes = "0.9.0"
-elements = { version = "0.18", features = [ "serde-feature" ] }
-jsonrpc_client = { version = "0.6", features = [ "reqwest" ] }
+elements = { version = "0.18", features = ["serde-feature"] }
+jsonrpc_client = { version = "0.6", features = ["reqwest"] }
 reqwest = "0.11"
 serde = "1.0"
 
 [dev-dependencies]
 elements-harness = { git = "https://github.com/comit-network/elements-harness" }
 testcontainers = "0.12"
-tokio = { version = "1", default-features = false, features = [ "macros" ] }
+tokio = { version = "1", default-features = false, features = ["macros"] }
