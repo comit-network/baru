@@ -121,7 +121,7 @@ mod tests {
         let lender = lender
             .interpret(
                 &mut rng,
-                &SECP256K1,
+                SECP256K1,
                 {
                     let client = client.clone();
                     |amount, asset| async move { find_inputs(&client, asset, amount).await }
@@ -133,7 +133,7 @@ mod tests {
             .unwrap();
         let loan_response = lender.loan_response();
 
-        let borrower = borrower.interpret(&SECP256K1, loan_response).unwrap();
+        let borrower = borrower.interpret(SECP256K1, loan_response).unwrap();
         let loan_transaction = borrower
             .sign({
                 let wallet = borrower_wallet.clone();
@@ -160,7 +160,7 @@ mod tests {
         let loan_repayment_transaction = borrower
             .loan_repayment_transaction(
                 &mut rng,
-                &SECP256K1,
+                SECP256K1,
                 {
                     let borrower_wallet = borrower_wallet.clone();
                     |amount, asset| async move { borrower_wallet.find_inputs(asset, amount).await }
@@ -277,7 +277,7 @@ mod tests {
         let lender = lender
             .interpret(
                 &mut rng,
-                &SECP256K1,
+                SECP256K1,
                 {
                     let client = client.clone();
                     |amount, asset| async move { find_inputs(&client, asset, amount).await }
@@ -289,7 +289,7 @@ mod tests {
             .unwrap();
         let loan_response = lender.loan_response();
 
-        let borrower = borrower.interpret(&SECP256K1, loan_response).unwrap();
+        let borrower = borrower.interpret(SECP256K1, loan_response).unwrap();
         let loan_transaction = borrower
             .sign(|transaction| async move { Ok(borrower_wallet.sign_all_inputs(transaction)) })
             .await
@@ -309,7 +309,7 @@ mod tests {
             .unwrap();
 
         let liquidation_transaction = lender
-            .liquidation_transaction(&mut rng, &SECP256K1, Amount::from_sat(1))
+            .liquidation_transaction(&mut rng, SECP256K1, Amount::from_sat(1))
             .await
             .unwrap();
 
@@ -426,7 +426,7 @@ mod tests {
         let lender = lender
             .interpret(
                 &mut rng,
-                &SECP256K1,
+                SECP256K1,
                 {
                     let client = client.clone();
                     |amount, asset| async move { find_inputs(&client, asset, amount).await }
@@ -438,7 +438,7 @@ mod tests {
             .unwrap();
         let loan_response = lender.loan_response();
 
-        let borrower = borrower.interpret(&SECP256K1, loan_response).unwrap();
+        let borrower = borrower.interpret(SECP256K1, loan_response).unwrap();
         let loan_transaction = borrower
             .sign(|transaction| async move { Ok(borrower_wallet.sign_all_inputs(transaction)) })
             .await
@@ -474,7 +474,7 @@ mod tests {
             let liquidation_transaction = lender
                 .dynamic_liquidation_transaction(
                     &mut rng,
-                    &SECP256K1,
+                    SECP256K1,
                     oracle_msg,
                     oracle_sig,
                     Amount::ONE_SAT,
@@ -505,7 +505,7 @@ mod tests {
             let liquidation_transaction = lender
                 .dynamic_liquidation_transaction(
                     &mut rng,
-                    &SECP256K1,
+                    SECP256K1,
                     oracle_msg,
                     oracle_sig,
                     Amount::ONE_SAT,
@@ -539,7 +539,7 @@ mod tests {
             let liquidation_transaction = lender
                 .dynamic_liquidation_transaction(
                     &mut rng,
-                    &SECP256K1,
+                    SECP256K1,
                     oracle_msg,
                     oracle_sig,
                     Amount::ONE_SAT,
@@ -570,7 +570,7 @@ mod tests {
             let liquidation_transaction = lender
                 .dynamic_liquidation_transaction(
                     &mut rng,
-                    &SECP256K1,
+                    SECP256K1,
                     oracle_msg,
                     oracle_sig,
                     Amount::ONE_SAT,
@@ -789,7 +789,7 @@ mod tests {
     {
         let sk = SecretKey::new(rng);
         let pk = PublicKey::from_private_key(
-            &SECP256K1,
+            SECP256K1,
             &PrivateKey {
                 compressed: true,
                 network: Network::Regtest,

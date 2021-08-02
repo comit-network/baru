@@ -64,16 +64,16 @@ where
     let (receive_output_alice, abf_receive_alice, vbf_receive_alice) =
         TxOut::new_not_last_confidential(
             rng,
-            &secp,
+            secp,
             alice.receive_amount.as_sat(),
             alice.address.clone(),
             alice.receive_asset,
-            &inputs_not_last_confidential.as_slice(),
+            inputs_not_last_confidential.as_slice(),
         )?;
 
     let (redeem_output_bob, abf_receive_bob, vbf_receive_bob) = TxOut::new_not_last_confidential(
         rng,
-        &secp,
+        secp,
         bob.receive_amount.as_sat(),
         bob.address.clone(),
         bob.receive_asset,
@@ -82,7 +82,7 @@ where
     let (change_output_alice, abf_change_alice, vbf_change_alice) =
         TxOut::new_not_last_confidential(
             rng,
-            &secp,
+            secp,
             change_amount_alice.as_sat(),
             alice.address.clone(),
             bob.receive_asset,
@@ -112,7 +112,7 @@ where
 
     let (change_output_bob, _, _) = TxOut::new_last_confidential(
         rng,
-        &secp,
+        secp,
         change_amount_bob.as_sat(),
         bob.address,
         alice.receive_asset,
@@ -176,7 +176,7 @@ pub fn sign_with_key<C>(
 where
     C: Signing,
 {
-    let input_pk = PublicKey::from_secret_key(&secp, &input_sk);
+    let input_pk = PublicKey::from_secret_key(secp, input_sk);
 
     let hash = hash160::Hash::hash(&input_pk.serialize());
     let script = Builder::new()
@@ -189,7 +189,7 @@ where
 
     let sighash = cache.segwitv0_sighash(index, &script, value, SigHashType::All);
 
-    let sig = secp.sign(&Message::from(sighash), &input_sk);
+    let sig = secp.sign(&Message::from(sighash), input_sk);
 
     let mut serialized_signature = sig.serialize_der().to_vec();
     serialized_signature.push(SigHashType::All as u8);
