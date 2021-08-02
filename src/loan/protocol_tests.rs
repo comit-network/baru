@@ -77,8 +77,6 @@ mod tests {
 
             client.generatetoaddress(1, &miner_address).await.unwrap();
 
-            let timelock = 10;
-
             let borrower = Borrower0::new(
                 &mut rng,
                 {
@@ -89,7 +87,6 @@ mod tests {
                 address_blinding_sk,
                 collateral_amount,
                 Amount::ONE_SAT,
-                timelock,
                 bitcoin_asset_id,
                 usdt_asset_id,
             )
@@ -118,6 +115,7 @@ mod tests {
 
         let loan_request = borrower.loan_request();
 
+        let timelock = 10;
         let lender = lender
             .interpret(
                 &mut rng,
@@ -127,7 +125,8 @@ mod tests {
                     |amount, asset| async move { find_inputs(&client, asset, amount).await }
                 },
                 loan_request,
-                38_000, // value of 1 BTC as of 18.06.2021
+                38_000, // value of 1 BTC as of 18.06.2021,
+                timelock,
             )
             .await
             .unwrap();
@@ -233,8 +232,6 @@ mod tests {
 
             client.generatetoaddress(1, &miner_address).await.unwrap();
 
-            let timelock = client.get_blockcount().await.unwrap() + 5;
-
             let borrower = Borrower0::new(
                 &mut rng,
                 {
@@ -245,7 +242,6 @@ mod tests {
                 address_blinding_sk,
                 collateral_amount,
                 Amount::ONE_SAT,
-                timelock,
                 bitcoin_asset_id,
                 usdt_asset_id,
             )
@@ -274,6 +270,7 @@ mod tests {
 
         let loan_request = borrower.loan_request();
 
+        let timelock = client.get_blockcount().await.unwrap() + 5;
         let lender = lender
             .interpret(
                 &mut rng,
@@ -284,6 +281,7 @@ mod tests {
                 },
                 loan_request,
                 38_000, // value of 1 BTC as of 18.06.2021
+                timelock,
             )
             .await
             .unwrap();
@@ -382,8 +380,6 @@ mod tests {
 
             client.generatetoaddress(1, &miner_address).await.unwrap();
 
-            let timelock = client.get_blockcount().await.unwrap() + 100;
-
             let borrower = Borrower0::new(
                 &mut rng,
                 {
@@ -394,7 +390,6 @@ mod tests {
                 address_blinding_sk,
                 collateral_amount,
                 Amount::ONE_SAT,
-                timelock,
                 bitcoin_asset_id,
                 usdt_asset_id,
             )
@@ -423,6 +418,7 @@ mod tests {
 
         let loan_request = borrower.loan_request();
 
+        let timelock = client.get_blockcount().await.unwrap() + 100;
         let lender = lender
             .interpret(
                 &mut rng,
@@ -433,6 +429,7 @@ mod tests {
                 },
                 loan_request,
                 38_000, // value of 1 BTC as of 18.06.2021
+                timelock,
             )
             .await
             .unwrap();
