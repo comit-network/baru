@@ -1,0 +1,34 @@
+[package]
+name = "rocket_sqlite_oracle"
+version = "0.1.0"
+edition = "2018"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+backoff = { version = "0.3", features = ["tokio"] }
+bitcoin = { version = "0.26", features = ["rand", "use-serde"] }
+futures = { version = "0.3", default-features = false }
+rocket = { git = "https://github.com/SergioBenitez/Rocket", features = ["json"] }
+rocket_db_pools = { git = "https://github.com/SergioBenitez/Rocket", features = ["sqlx_sqlite"] }
+rust_decimal = "1.15"
+secp256k1 = { version = "0.20", features = ["bitcoin_hashes", "rand"] }
+secp256k1-zkp = { version = "0.4", features = ["global-context", "hashes"] }
+serde = { version = "1", features = ["derive"] }
+serde_cbor = "0.11"
+serde_json = "1"
+serde_with = { version = "1", features = ["macros"] }
+sqlx = { version = "0.5", features = ["macros", "offline"] }
+structopt = "0.3"
+thiserror = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "macros", "sync", "process", "fs", "net"] }
+tokio-socks = "0.5"
+tokio-tungstenite = { version = "0.14", features = ["rustls-tls"] }
+tokio-util = { version = "0.6", features = ["io"] }
+tracing = { version = "0.1", features = ["attributes"] }
+tracing-subscriber = { version = "0.2", default-features = false, features = ["fmt", "ansi", "env-filter", "chrono", "tracing-log", "json"] }
+url = { version = "2", features = ["serde"] }
+
+baru = { path = "../" }

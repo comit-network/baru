@@ -1,5 +1,5 @@
 [workspace]
-members = ["elements-rpc"]
+members = ["elements-rpc", "rocket_sqlite_oracle"]
 
 [package]
 name = "baru"
