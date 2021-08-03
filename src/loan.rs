@@ -87,6 +87,7 @@ pub struct CollateralContract {
     repayment_principal_output: TxOut,
     repayment_principal_output_blinder: SecretKey,
     timelock: u32,
+    chain: Chain,
     // Dynamic liquidation
     oracle_pk: PublicKey,
     min_price_btc: u64,
@@ -104,6 +105,7 @@ impl CollateralContract {
     const COV_SCRIPT_BYTES: [u8; 3] = [0xad, 0xc1, 0x68];
 
     /// Fill in the collateral contract template with the provided arguments.
+    #[allow(clippy::too_many_arguments)]
     fn new(
         borrower_pk: PublicKey,
         lender_pk: PublicKey,
@@ -112,6 +114,7 @@ impl CollateralContract {
         oracle_pk: PublicKey,
         min_price_btc: u64,
         min_timestamp: u64,
+        chain: Chain,
     ) -> Result<Self> {
         use elements::opcodes::all::*;
 
@@ -195,6 +198,7 @@ impl CollateralContract {
             repayment_principal_output,
             repayment_principal_output_blinder,
             timelock,
+            chain,
             oracle_pk,
             min_price_btc,
             min_timestamp,
@@ -403,12 +407,11 @@ impl CollateralContract {
     }
 
     fn address(&self) -> Address {
-        // FIXME: AddressParams should not be hard-coded
-        Address::p2wsh(&self.raw_script, None, &AddressParams::ELEMENTS)
+        Address::p2wsh(&self.raw_script, None, self.chain.into())
     }
 
     fn blinded_address(&self, blinder: secp256k1_zkp::PublicKey) -> Address {
-        Address::p2wsh(&self.raw_script, Some(blinder), &AddressParams::ELEMENTS)
+        Address::p2wsh(&self.raw_script, Some(blinder), self.chain.into())
     }
 
     fn repayment_amount<C>(&self, secp: &Secp256k1<C>) -> Result<Amount>
@@ -902,6 +905,8 @@ impl Lender0 {
         CS: FnOnce(Amount, AssetId) -> CF,
         CF: Future<Output = Result<Vec<Input>>>,
     {
+        let chain = Chain::new(&loan_request.borrower_address, &self.address)?;
+
         // TODO: This API should change so that the caller can decide on all this outside of this library
         let LoanAmounts {
             principal: principal_amount,
@@ -974,6 +979,7 @@ impl Lender0 {
             self.oracle_pk,
             min_price_btc,
             contract_creation_timestamp,
+            chain,
         )
         .context("could not build collateral contract")?;
         let collateral_address = collateral_contract.blinded_address(collateral_blinding_pk.key);
@@ -1473,6 +1479,57 @@ pub mod transaction_as_string {
 
         Ok(tx)
     }
+}
+
+/// Possible networks on which the loan contract may be deployed.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+enum Chain {
+    Elements,
+    Liquid,
+}
+
+impl Chain {
+    /// Calculate the `Chain` based on the addresses of the borrower and the lender.
+    ///
+    /// If their `AddressParams` don't match it means that the parties
+    /// are not on the same network, so we return an error.
+    ///
+    /// If their `AddressParams` don't describe a known chain, we
+    /// return an error.
+    fn new(borrower: &Address, lender: &Address) -> Result<Self, ChainError> {
+        let borrower = borrower.params;
+        let lender = lender.params;
+
+        if borrower != lender {
+            return Err(ChainError::Different { borrower, lender });
+        }
+
+        match *borrower {
+            AddressParams::ELEMENTS => Ok(Self::Elements),
+            AddressParams::LIQUID => Ok(Self::Liquid),
+            _ => Err(ChainError::Custom(borrower)),
+        }
+    }
+}
+
+impl From<Chain> for &AddressParams {
+    fn from(from: Chain) -> Self {
+        match from {
+            Chain::Elements => &AddressParams::ELEMENTS,
+            Chain::Liquid => &AddressParams::LIQUID,
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+enum ChainError {
+    #[error("Borrower and lender are on different chains: {borrower:?} vs {lender:?}")]
+    Different {
+        borrower: &'static AddressParams,
+        lender: &'static AddressParams,
+    },
+    #[error("Unsupported custom chain: {0:?}")]
+    Custom(&'static AddressParams),
 }
 
 #[cfg(test)]
