@@ -804,6 +804,7 @@ impl Borrower1 {
         tx_outs.push(collateral_output);
         tx_outs.push(tx_fee_output);
 
+        let loan_contract_index = (tx_ins.len() - 1) as u32;
         let mut tx = Transaction {
             version: 2,
             lock_time: 0,
@@ -816,7 +817,7 @@ impl Borrower1 {
             .satisfy_loan_repayment(
                 &mut tx,
                 self.repayment_collateral_input.original_txout.value,
-                1,
+                loan_contract_index,
                 // TODO: Push ownership (and generation) of secret key outside of the library
                 |message| async move { Ok(SECP256K1.sign(&message, &self.keypair.0)) },
             )
