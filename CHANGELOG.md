@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Always satisfy the collateral contract input in the loan repayment transaction correctly.
+  We used to assume that it was located at index `1`, but this could change if the number of inputs used to cover the repayment output was greater than 1.
+
 ## [0.2.0] - 2021-07-30
 
 ### Added
