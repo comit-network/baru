@@ -24,9 +24,6 @@ use std::future::Future;
 use std::str::FromStr;
 use std::time::SystemTime;
 
-#[cfg(test)]
-mod protocol_tests;
-
 /// Secret key used to produce a signature which proves that an
 /// input's witness stack contains transaction data equivalent to the
 /// transaction which includes the input itself.
@@ -1386,7 +1383,7 @@ impl Lender1 {
 ///
 /// In particular, the oracle must encode the message in such a way
 /// that it can be decomposed and used from within an Elements script.
-pub(crate) mod oracle {
+pub mod oracle {
     pub struct Message {
         /// Price of bitcoin in whole USD.
         btc_price: WitnessStackInteger,
@@ -1412,7 +1409,7 @@ pub(crate) mod oracle {
             self.timestamp.serialize()
         }
 
-        #[cfg(test)]
+        /// Construct the message hash.
         pub fn message_hash(&self) -> secp256k1::Message {
             use bitcoin_hashes::{sha256, Hash, HashEngine};
 
