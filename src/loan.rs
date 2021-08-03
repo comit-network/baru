@@ -744,6 +744,8 @@ impl Borrower1 {
             .map(|input| input.txin)
             .collect();
         tx_ins.push(collateral_input.txin);
+        let collateral_contract_index = (tx_ins.len() - 1) as u32;
+
         let tx_ins = tx_ins
             .into_iter()
             .map(|previous_output| TxIn {
@@ -816,7 +818,7 @@ impl Borrower1 {
             .satisfy_loan_repayment(
                 &mut tx,
                 self.repayment_collateral_input.original_txout.value,
-                1,
+                collateral_contract_index,
                 // TODO: Push ownership (and generation) of secret key outside of the library
                 |message| async move { Ok(SECP256K1.sign(&message, &self.keypair.0)) },
             )
