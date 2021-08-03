@@ -436,7 +436,6 @@ pub struct LoanRequest {
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     fee_sats_per_vbyte: Amount,
     borrower_pk: PublicKey,
-    timelock: u32,
     borrower_address: Address,
 }
 
@@ -475,7 +474,6 @@ pub struct Borrower0 {
     collateral_inputs: Vec<Input>,
     #[serde(with = "::elements::bitcoin::util::amount::serde::as_sat")]
     fee_sats_per_vbyte: Amount,
-    timelock: u32,
     bitcoin_asset_id: AssetId,
     usdt_asset_id: AssetId,
 }
@@ -489,7 +487,6 @@ impl Borrower0 {
         address_blinding_sk: SecretKey,
         collateral_amount: Amount,
         fee_sats_per_vbyte: Amount,
-        timelock: u32,
         bitcoin_asset_id: AssetId,
         usdt_asset_id: AssetId,
     ) -> Result<Self>
@@ -508,7 +505,6 @@ impl Borrower0 {
             collateral_amount,
             collateral_inputs,
             fee_sats_per_vbyte,
-            timelock,
             bitcoin_asset_id,
             usdt_asset_id,
         })
@@ -520,7 +516,6 @@ impl Borrower0 {
             collateral_inputs: self.collateral_inputs.clone(),
             fee_sats_per_vbyte: self.fee_sats_per_vbyte,
             borrower_pk: self.keypair.1,
-            timelock: self.timelock,
             borrower_address: self.address.clone(),
         }
     }
@@ -894,6 +889,7 @@ impl Lender0 {
         secp: &Secp256k1<C>,
         coin_selector: CS,
         loan_request: LoanRequest,
+        timelock: u32,
         rate: u64,
     ) -> Result<Lender1>
     where
@@ -971,7 +967,7 @@ impl Lender0 {
         let collateral_contract = CollateralContract::new(
             loan_request.borrower_pk,
             lender_pk,
-            loan_request.timelock,
+            timelock,
             (repayment_principal_output, self.address_blinder),
             self.oracle_pk,
             min_price_btc,
@@ -1122,7 +1118,7 @@ impl Lender0 {
         Ok(Lender1 {
             keypair: self.keypair,
             address: self.address,
-            timelock: loan_request.timelock,
+            timelock,
             loan_transaction,
             collateral_contract,
             collateral_amount: loan_request.collateral_amount,

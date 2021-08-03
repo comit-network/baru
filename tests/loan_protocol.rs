@@ -76,8 +76,6 @@ async fn borrow_and_repay() {
 
         client.generatetoaddress(1, &miner_address).await.unwrap();
 
-        let timelock = 10;
-
         let borrower = Borrower0::new(
             &mut rng,
             {
@@ -88,7 +86,6 @@ async fn borrow_and_repay() {
             address_blinding_sk,
             collateral_amount,
             Amount::ONE_SAT,
-            timelock,
             bitcoin_asset_id,
             usdt_asset_id,
         )
@@ -116,7 +113,7 @@ async fn borrow_and_repay() {
     };
 
     let loan_request = borrower.loan_request();
-
+    let timelock = 10;
     let lender = lender
         .interpret(
             &mut rng,
@@ -127,6 +124,7 @@ async fn borrow_and_repay() {
             },
             loan_request,
             38_000, // value of 1 BTC as of 18.06.2021
+            timelock,
         )
         .await
         .unwrap();
@@ -232,8 +230,6 @@ async fn lend_and_liquidate() {
 
         client.generatetoaddress(1, &miner_address).await.unwrap();
 
-        let timelock = client.get_blockcount().await.unwrap() + 5;
-
         let borrower = Borrower0::new(
             &mut rng,
             {
@@ -244,7 +240,6 @@ async fn lend_and_liquidate() {
             address_blinding_sk,
             collateral_amount,
             Amount::ONE_SAT,
-            timelock,
             bitcoin_asset_id,
             usdt_asset_id,
         )
@@ -273,6 +268,7 @@ async fn lend_and_liquidate() {
 
     let loan_request = borrower.loan_request();
 
+    let timelock = client.get_blockcount().await.unwrap() + 5;
     let lender = lender
         .interpret(
             &mut rng,
@@ -282,6 +278,7 @@ async fn lend_and_liquidate() {
                 |amount, asset| async move { find_inputs(&client, asset, amount).await }
             },
             loan_request,
+            timelock,
             38_000, // value of 1 BTC as of 18.06.2021
         )
         .await
@@ -381,8 +378,6 @@ async fn lend_and_dynamic_liquidate() {
 
         client.generatetoaddress(1, &miner_address).await.unwrap();
 
-        let timelock = client.get_blockcount().await.unwrap() + 100;
-
         let borrower = Borrower0::new(
             &mut rng,
             {
@@ -393,7 +388,6 @@ async fn lend_and_dynamic_liquidate() {
             address_blinding_sk,
             collateral_amount,
             Amount::ONE_SAT,
-            timelock,
             bitcoin_asset_id,
             usdt_asset_id,
         )
@@ -422,6 +416,7 @@ async fn lend_and_dynamic_liquidate() {
 
     let loan_request = borrower.loan_request();
 
+    let timelock = client.get_blockcount().await.unwrap() + 100;
     let lender = lender
         .interpret(
             &mut rng,
@@ -431,6 +426,7 @@ async fn lend_and_dynamic_liquidate() {
                 |amount, asset| async move { find_inputs(&client, asset, amount).await }
             },
             loan_request,
+            timelock,
             38_000, // value of 1 BTC as of 18.06.2021
         )
         .await
