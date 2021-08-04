@@ -112,18 +112,22 @@ async fn borrow_and_repay() {
         (lender, address)
     };
 
-    let loan_request = borrower.loan_request();
     let timelock = 10;
     let lender = lender
-        .interpret(
+        .build_loan_transaction(
             &mut rng,
             SECP256K1,
             {
                 let client = client.clone();
                 |amount, asset| async move { find_inputs(&client, asset, amount).await }
             },
-            loan_request,
-            38_000, // value of 1 BTC as of 18.06.2021
+            38_000, // value of 1 BTC as of 18.06.2021,
+            borrower.fee_sats_per_vbyte(),
+            (
+                *borrower.collateral_amount(),
+                borrower.collateral_inputs().to_vec(),
+            ),
+            (borrower.pk(), borrower.address().clone()),
             timelock,
         )
         .await
@@ -266,20 +270,23 @@ async fn lend_and_liquidate() {
         (lender, address)
     };
 
-    let loan_request = borrower.loan_request();
-
     let timelock = client.get_blockcount().await.unwrap() + 5;
     let lender = lender
-        .interpret(
+        .build_loan_transaction(
             &mut rng,
             SECP256K1,
             {
                 let client = client.clone();
                 |amount, asset| async move { find_inputs(&client, asset, amount).await }
             },
-            loan_request,
-            timelock,
             38_000, // value of 1 BTC as of 18.06.2021
+            borrower.fee_sats_per_vbyte(),
+            (
+                *borrower.collateral_amount(),
+                borrower.collateral_inputs().to_vec(),
+            ),
+            (borrower.pk(), borrower.address().clone()),
+            timelock,
         )
         .await
         .unwrap();
@@ -414,20 +421,23 @@ async fn lend_and_dynamic_liquidate() {
         (lender, address)
     };
 
-    let loan_request = borrower.loan_request();
-
     let timelock = client.get_blockcount().await.unwrap() + 100;
     let lender = lender
-        .interpret(
+        .build_loan_transaction(
             &mut rng,
             SECP256K1,
             {
                 let client = client.clone();
                 |amount, asset| async move { find_inputs(&client, asset, amount).await }
             },
-            loan_request,
-            timelock,
             38_000, // value of 1 BTC as of 18.06.2021
+            borrower.fee_sats_per_vbyte(),
+            (
+                *borrower.collateral_amount(),
+                borrower.collateral_inputs().to_vec(),
+            ),
+            (borrower.pk(), borrower.address().clone()),
+            timelock,
         )
         .await
         .unwrap();

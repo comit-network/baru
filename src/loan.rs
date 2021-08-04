@@ -441,6 +441,7 @@ pub struct LoanRequest {
 
 impl LoanRequest {
     /// Get a copy of the collateral amount.
+    #[deprecated(note = "Use accessor on Borrower0 instead", since = "0.3.0")]
     pub fn collateral_amount(&self) -> Amount {
         self.collateral_amount
     }
@@ -510,6 +511,7 @@ impl Borrower0 {
         })
     }
 
+    #[deprecated(note = "Use accessors on Self instead", since = "0.3.0")]
     pub fn loan_request(&self) -> LoanRequest {
         LoanRequest {
             collateral_amount: self.collateral_amount,
@@ -613,6 +615,34 @@ impl Borrower0 {
             bitcoin_asset_id: self.bitcoin_asset_id,
             usdt_asset_id: self.usdt_asset_id,
         })
+    }
+
+    /// Get a reference to the value of the collateral the borrower
+    /// will put up for the loan.
+    pub fn collateral_amount(&self) -> &Amount {
+        &self.collateral_amount
+    }
+
+    /// Get a reference to the inputs the borrower will use to fund
+    /// the loan transaction's collateral.
+    pub fn collateral_inputs(&self) -> &[Input] {
+        self.collateral_inputs.as_slice()
+    }
+
+    /// Get a copy of how many satoshis per vbyte the borrower will
+    /// use to pay for the loan transaction's fees.
+    pub fn fee_sats_per_vbyte(&self) -> Amount {
+        self.fee_sats_per_vbyte
+    }
+
+    /// Get a reference to the borrower's address.
+    pub fn address(&self) -> &Address {
+        &self.address
+    }
+
+    /// Get a copy of the borrower's PublicKey.
+    pub fn pk(&self) -> PublicKey {
+        self.keypair.1
     }
 }
 
@@ -883,6 +913,7 @@ impl Lender0 {
     /// Interpret a loan request and performs lender logic.
     ///
     /// rate is expressed in usdt sats per btc, i.e. rate = 1 BTC / USDT
+    #[deprecated(note = "Use interpret_loan_request instead", since = "0.3.0")]
     pub async fn interpret<R, C, CS, CF>(
         self,
         rng: &mut R,
@@ -898,16 +929,49 @@ impl Lender0 {
         CS: FnOnce(Amount, AssetId) -> CF,
         CF: Future<Output = Result<Vec<Input>>>,
     {
-        let chain = Chain::new(&loan_request.borrower_address, &self.address)?;
+        self.build_loan_transaction(
+            rng,
+            secp,
+            coin_selector,
+            rate,
+            loan_request.fee_sats_per_vbyte,
+            (
+                loan_request.collateral_amount,
+                loan_request.collateral_inputs,
+            ),
+            (loan_request.borrower_pk, loan_request.borrower_address),
+            timelock,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn build_loan_transaction<R, C, CS, CF>(
+        self,
+        rng: &mut R,
+        secp: &Secp256k1<C>,
+        coin_selector: CS,
+        rate: u64,
+        fee_sats_per_vbyte: Amount,
+        (collateral_amount, collateral_inputs): (Amount, Vec<Input>),
+        (borrower_pk, borrower_address): (PublicKey, Address),
+        timelock: u32,
+    ) -> Result<Lender1>
+    where
+        R: RngCore + CryptoRng,
+        C: Verification + Signing,
+        CS: FnOnce(Amount, AssetId) -> CF,
+        CF: Future<Output = Result<Vec<Input>>>,
+    {
+        let chain = Chain::new(&borrower_address, &self.address)?;
 
         // TODO: This API should change so that the caller can decide on all this outside of this library
         let LoanAmounts {
             principal: principal_amount,
             repayment: repayment_amount,
             min_price_btc,
-        } = Lender0::calculate_loan_amounts(&loan_request, rate, 20, 10)?;
-        let collateral_inputs = loan_request
-            .collateral_inputs
+        } = Lender0::calculate_loan_amounts(collateral_amount, rate, 20, 10)?;
+        let collateral_inputs = collateral_inputs
             .into_iter()
             .map(|input| input.into_unblinded_input(secp))
             .collect::<Result<Vec<_>>>()?;
@@ -932,8 +996,6 @@ impl Lender0 {
         let collateral_input_amount = collateral_inputs
             .iter()
             .fold(0, |sum, input| sum + input.secrets.value);
-
-        let collateral_amount = loan_request.collateral_amount;
 
         let (repayment_principal_output, repayment_collateral_abf, repayment_collateral_vbf) = {
             let dummy_asset_id = self.usdt_asset_id;
@@ -965,7 +1027,7 @@ impl Lender0 {
         let contract_creation_timestamp = now.as_secs() + 300;
 
         let collateral_contract = CollateralContract::new(
-            loan_request.borrower_pk,
+            borrower_pk,
             lender_pk,
             timelock,
             (repayment_principal_output, self.address_blinder),
@@ -995,7 +1057,7 @@ impl Lender0 {
             rng,
             secp,
             principal_amount.as_sat(),
-            loan_request.borrower_address.clone(),
+            borrower_address.clone(),
             self.usdt_asset_id,
             inputs_not_last_confidential.as_slice(),
         )
@@ -1038,8 +1100,7 @@ impl Lender0 {
         ];
 
         let tx_fee = Amount::from_sat(
-            estimate_virtual_size(inputs.len() as u64, 4)
-                * loan_request.fee_sats_per_vbyte.as_sat(),
+            estimate_virtual_size(inputs.len() as u64, 4) * fee_sats_per_vbyte.as_sat(),
         );
         let collateral_change_amount = Amount::from_sat(collateral_input_amount)
             .checked_sub(collateral_amount)
@@ -1055,7 +1116,7 @@ impl Lender0 {
             rng,
             secp,
             collateral_change_amount.as_sat(),
-            loan_request.borrower_address,
+            borrower_address,
             self.bitcoin_asset_id,
             inputs
                 .iter()
@@ -1121,7 +1182,7 @@ impl Lender0 {
             timelock,
             loan_transaction,
             collateral_contract,
-            collateral_amount: loan_request.collateral_amount,
+            collateral_amount,
             repayment_collateral_input,
             repayment_collateral_abf,
             repayment_collateral_vbf,
@@ -1130,7 +1191,7 @@ impl Lender0 {
     }
 
     fn calculate_loan_amounts(
-        loan_request: &LoanRequest,
+        collateral_amount: Amount,
         rate: u64,
         overcollateralization_percentage: u8,
         interest_percentage: u8,
@@ -1138,7 +1199,7 @@ impl Lender0 {
         use rust_decimal::prelude::ToPrimitive;
         use rust_decimal::Decimal;
 
-        let sats = loan_request.collateral_amount.as_sat();
+        let sats = collateral_amount.as_sat();
         let btc = Decimal::from(sats)
             .checked_div(Decimal::from(Amount::ONE_BTC.as_sat()))
             .context("division overflow")?;

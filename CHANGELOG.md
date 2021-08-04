@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Lender sets collateral contract timelock, as opposed to the borrower.
+- Deprecated all APIs which use `LoanRequest`, to give users more control over how they want to serialize the parameters inside loan request.
+  We've also added a new API `build_loan_transaction` on `Lender0`, which wraps the now deprecated `interpret`.
 
 ## [0.2.0] - 2021-07-30
 
