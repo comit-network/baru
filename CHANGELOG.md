@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Chain on which the loan protocol takes place is no longer hard-coded to Elements (local development node).
+  The chain is implicitly configured by the addresses that are passed in.
+  Furthermore, the protocol now verifies that borrower and lender are on the same chain.
+
 ### Fixed
 
 - Always satisfy the collateral contract input in the loan repayment transaction correctly.
