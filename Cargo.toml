@@ -1,5 +1,5 @@
 [workspace]
-members = ["elements-rpc", "rocket_sqlite_oracle"]
+members = ["rocket_sqlite_oracle"]
 
 [package]
 name = "baru"
@@ -28,8 +28,7 @@ sha2 = "0.9"
 thiserror = "1"
 
 [dev-dependencies]
-elements-harness = { git = "https://github.com/comit-network/elements-harness", rev = "0c28948c124d68e828e0f27c9202ba278dc04421" }
-elements-rpc = { path = "./elements-rpc" }
+elements-consensus = { git = "https://github.com/comit-network/rust-elements-consensus", rev = "ac88dbedcd019eef44f58499417dcdbeda994b0b" }
+link-cplusplus = "1"
 rand_chacha = "0.1"
-testcontainers = "0.12"
-tokio = { version = "1", default-features = false, features = ["macros"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }

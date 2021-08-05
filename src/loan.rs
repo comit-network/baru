@@ -404,7 +404,7 @@ impl CollateralContract {
         Ok(())
     }
 
-    fn address(&self) -> Address {
+    pub fn address(&self) -> Address {
         Address::p2wsh(&self.raw_script, None, self.chain.into())
     }
 
