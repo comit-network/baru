@@ -1,0 +1,133 @@
+{
+  "db": "SQLite",
+  "1b786e5ca7e992518780e558515dccee0a7fda37dbc10b71ec33cef7cc95b10e": {
+    "query": "\n        select\n            timestamp,\n            ask_price as price,\n            ask_signature as signature\n        from signatures\n        order by timestamp desc\n        limit 1;\n        ",
+    "describe": {
+      "columns": [
+        {
+          "name": "timestamp",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "price",
+          "ordinal": 1,
+          "type_info": "Int64"
+        },
+        {
+          "name": "signature",
+          "ordinal": 2,
+          "type_info": "Blob"
+        }
+      ],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "348c5471de83dac8f76a8e11732ea52f13243e03a8050857e93bf22da05cb751": {
+    "query": "\n                        insert into signatures (\n                          timestamp,\n                          ask_price,\n                          bid_price,\n                          ask_signature,\n                          bid_signature\n                        ) values (?, ?, ?, ?, ?)",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Right": 5
+      },
+      "nullable": []
+    }
+  },
+  "7dfffbdeb32f6fcfbcc96a2ea1bf42f82b45b6dddd6c55faae88c57c30a0621c": {
+    "query": "\n        with above as (\n          select *\n          from signatures\n          where timestamp >= ?\n          order by timestamp\n          limit 1\n        ),\n\n        below as (\n          select *\n          from signatures\n          where timestamp < ?\n          order by timestamp desc\n          limit 1\n        ),\n\n        opts as (\n          select * from above\n          union all\n          select * from below\n        )\n\n        select\n          timestamp,\n          bid_price as price,\n          bid_signature as signature\n        from opts\n        order by abs(? - timestamp)\n        limit 1;\n        ",
+    "describe": {
+      "columns": [
+        {
+          "name": "timestamp",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "price",
+          "ordinal": 1,
+          "type_info": "Int64"
+        },
+        {
+          "name": "signature",
+          "ordinal": 2,
+          "type_info": "Blob"
+        }
+      ],
+      "parameters": {
+        "Right": 3
+      },
+      "nullable": [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "931284ec445e69973e3edb5cd487a261bab4aa993e0f61a948e56f889e30d94a": {
+    "query": "\n        with above as (\n          select *\n          from signatures\n          where timestamp >= ?\n          order by timestamp\n          limit 1\n        ),\n\n        below as (\n          select *\n          from signatures\n          where timestamp < ?\n          order by timestamp desc\n          limit 1\n        ),\n\n        opts as (\n          select * from above\n          union all\n          select * from below\n        )\n\n        select\n          timestamp,\n          ask_price as price,\n          ask_signature as signature\n        from opts\n        order by abs(? - timestamp)\n        limit 1;\n        ",
+    "describe": {
+      "columns": [
+        {
+          "name": "timestamp",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "price",
+          "ordinal": 1,
+          "type_info": "Int64"
+        },
+        {
+          "name": "signature",
+          "ordinal": 2,
+          "type_info": "Blob"
+        }
+      ],
+      "parameters": {
+        "Right": 3
+      },
+      "nullable": [
+        false,
+        false,
+        false
+      ]
+    }
+  },
+  "a987447e32fd5d1cccc3316b2253054acfc6924e9a49c42d61b226379dbd1ab7": {
+    "query": "\n        select\n            timestamp,\n            bid_price as price,\n            bid_signature as signature\n        from signatures\n        order by timestamp desc\n        limit 1;\n        ",
+    "describe": {
+      "columns": [
+        {
+          "name": "timestamp",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "price",
+          "ordinal": 1,
+          "type_info": "Int64"
+        },
+        {
+          "name": "signature",
+          "ordinal": 2,
+          "type_info": "Blob"
+        }
+      ],
+      "parameters": {
+        "Right": 0
+      },
+      "nullable": [
+        false,
+        false,
+        false
+      ]
+    }
+  }
+}

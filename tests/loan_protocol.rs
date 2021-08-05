@@ -2,7 +2,8 @@ use std::time::SystemTime;
 
 use anyhow::{Context, Result};
 use baru::input::Input;
-use baru::loan::{oracle, Borrower0, Lender0};
+use baru::loan::{Borrower0, Lender0};
+use baru::oracle;
 use bitcoin_hashes::Hash;
 use elements::bitcoin::util::psbt::serialize::Serialize;
 use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
