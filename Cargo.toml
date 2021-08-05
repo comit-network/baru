@@ -11,7 +11,6 @@ description = "Library to facilitate DeFi on Liquid"
 
 [dependencies]
 anyhow = "1"
-bitcoin_hashes = "0.9.0"
 conquer-once = "0.3"
 elements = { version = "0.18", features = ["serde-feature"] }
 elements-miniscript = { version = "0.1", features = ["use-serde"] }

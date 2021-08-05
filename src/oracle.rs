@@ -1,4 +1,4 @@
-use bitcoin_hashes::{sha256, Hash, HashEngine};
+use elements::hashes::{sha256, Hash, HashEngine};
 use elements::secp256k1_zkp::{self, SECP256K1};
 
 pub struct Message {
