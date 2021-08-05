@@ -1,5 +1,5 @@
 use bitcoin_hashes::{sha256, Hash, HashEngine};
-use secp256k1_zkp::SECP256K1;
+use elements::secp256k1_zkp::{self, SECP256K1};
 
 pub struct Message {
     /// Price of bitcoin in whole USD.
