@@ -36,7 +36,11 @@ async fn borrow_and_repay() {
     };
 
     let bitcoin_asset_id = client.get_bitcoin_asset_id().await.unwrap();
-    let usdt_asset_id = client.issueasset(40.0, 0.0, false).await.unwrap().asset;
+    let usdt_asset_id = client
+        .issueasset(1_000_000.0, 0.0, false)
+        .await
+        .unwrap()
+        .asset;
     let (_oracle_sk, oracle_pk) = make_keypair(&mut rng);
 
     let miner_address = client.get_new_segwit_confidential_address().await.unwrap();
@@ -67,7 +71,7 @@ async fn borrow_and_repay() {
         let txid = client
             .send_asset_to_address(
                 &address,
-                Amount::from_btc(2.0).unwrap(),
+                Amount::from_btc(500_000.0).unwrap(),
                 Some(usdt_asset_id),
             )
             .await
@@ -113,20 +117,25 @@ async fn borrow_and_repay() {
     };
 
     let timelock = 10;
+    let principal_amount = Amount::from_btc(38_000.0).unwrap();
+    let principal_inputs = find_inputs(&client, usdt_asset_id, principal_amount)
+        .await
+        .unwrap();
+    let repayment_amount = principal_amount + Amount::from_btc(1_000.0).unwrap();
+    let min_collateral_price = 38_000;
+
     let lender = lender
         .build_loan_transaction(
             &mut rng,
             SECP256K1,
-            {
-                let client = client.clone();
-                |amount, asset| async move { find_inputs(&client, asset, amount).await }
-            },
-            38_000, // value of 1 BTC as of 18.06.2021,
             borrower.fee_sats_per_vbyte(),
             (
                 *borrower.collateral_amount(),
                 borrower.collateral_inputs().to_vec(),
             ),
+            (principal_amount, principal_inputs),
+            repayment_amount,
+            min_collateral_price,
             (borrower.pk(), borrower.address().clone()),
             timelock,
         )
@@ -195,7 +204,11 @@ async fn lend_and_liquidate() {
     };
 
     let bitcoin_asset_id = client.get_bitcoin_asset_id().await.unwrap();
-    let usdt_asset_id = client.issueasset(40.0, 0.0, false).await.unwrap().asset;
+    let usdt_asset_id = client
+        .issueasset(1_000_000.0, 0.0, false)
+        .await
+        .unwrap()
+        .asset;
     let (_oracle_sk, oracle_pk) = make_keypair(&mut rng);
 
     let miner_address = client.get_new_segwit_confidential_address().await.unwrap();
@@ -225,7 +238,7 @@ async fn lend_and_liquidate() {
         let txid = client
             .send_asset_to_address(
                 &address,
-                Amount::from_btc(2.0).unwrap(),
+                Amount::from_btc(500_000.0).unwrap(),
                 Some(usdt_asset_id),
             )
             .await
@@ -271,20 +284,25 @@ async fn lend_and_liquidate() {
     };
 
     let timelock = client.get_blockcount().await.unwrap() + 5;
+    let principal_amount = Amount::from_btc(38_000.0).unwrap();
+    let principal_inputs = find_inputs(&client, usdt_asset_id, principal_amount)
+        .await
+        .unwrap();
+    let repayment_amount = principal_amount + Amount::from_btc(1_000.0).unwrap();
+    let min_collateral_price = 38_000;
+
     let lender = lender
         .build_loan_transaction(
             &mut rng,
             SECP256K1,
-            {
-                let client = client.clone();
-                |amount, asset| async move { find_inputs(&client, asset, amount).await }
-            },
-            38_000, // value of 1 BTC as of 18.06.2021
             borrower.fee_sats_per_vbyte(),
             (
                 *borrower.collateral_amount(),
                 borrower.collateral_inputs().to_vec(),
             ),
+            (principal_amount, principal_inputs),
+            repayment_amount,
+            min_collateral_price,
             (borrower.pk(), borrower.address().clone()),
             timelock,
         )
@@ -346,7 +364,11 @@ async fn lend_and_dynamic_liquidate() {
     };
 
     let bitcoin_asset_id = client.get_bitcoin_asset_id().await.unwrap();
-    let usdt_asset_id = client.issueasset(40.0, 0.0, false).await.unwrap().asset;
+    let usdt_asset_id = client
+        .issueasset(1_000_000.0, 0.0, false)
+        .await
+        .unwrap()
+        .asset;
     let (oracle_sk, oracle_pk) = make_keypair(&mut rng);
 
     let miner_address = client.get_new_segwit_confidential_address().await.unwrap();
@@ -376,7 +398,7 @@ async fn lend_and_dynamic_liquidate() {
         let txid = client
             .send_asset_to_address(
                 &address,
-                Amount::from_btc(2.0).unwrap(),
+                Amount::from_btc(500_000.0).unwrap(),
                 Some(usdt_asset_id),
             )
             .await
@@ -422,20 +444,25 @@ async fn lend_and_dynamic_liquidate() {
     };
 
     let timelock = client.get_blockcount().await.unwrap() + 100;
+    let principal_amount = Amount::from_btc(38_000.0).unwrap();
+    let principal_inputs = find_inputs(&client, usdt_asset_id, principal_amount)
+        .await
+        .unwrap();
+    let repayment_amount = principal_amount + Amount::from_btc(1_000.0).unwrap();
+    let min_collateral_price = 38_000;
+
     let lender = lender
         .build_loan_transaction(
             &mut rng,
             SECP256K1,
-            {
-                let client = client.clone();
-                |amount, asset| async move { find_inputs(&client, asset, amount).await }
-            },
-            38_000, // value of 1 BTC as of 18.06.2021
             borrower.fee_sats_per_vbyte(),
             (
                 *borrower.collateral_amount(),
                 borrower.collateral_inputs().to_vec(),
             ),
+            (principal_amount, principal_inputs),
+            repayment_amount,
+            min_collateral_price,
             (borrower.pk(), borrower.address().clone()),
             timelock,
         )

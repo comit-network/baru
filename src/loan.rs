@@ -929,16 +929,25 @@ impl Lender0 {
         CS: FnOnce(Amount, AssetId) -> CF,
         CF: Future<Output = Result<Vec<Input>>>,
     {
+        let LoanAmounts {
+            principal: principal_amount,
+            repayment: repayment_amount,
+            min_collateral_price,
+        } = Lender0::calculate_loan_amounts(loan_request.collateral_amount, rate, 20, 10)?;
+
+        let principal_inputs = coin_selector(principal_amount, self.usdt_asset_id).await?;
+
         self.build_loan_transaction(
             rng,
             secp,
-            coin_selector,
-            rate,
             loan_request.fee_sats_per_vbyte,
             (
                 loan_request.collateral_amount,
                 loan_request.collateral_inputs,
             ),
+            (principal_amount, principal_inputs),
+            repayment_amount,
+            min_collateral_price,
             (loan_request.borrower_pk, loan_request.borrower_address),
             timelock,
         )
@@ -946,31 +955,24 @@ impl Lender0 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub async fn build_loan_transaction<R, C, CS, CF>(
+    pub async fn build_loan_transaction<R, C>(
         self,
         rng: &mut R,
         secp: &Secp256k1<C>,
-        coin_selector: CS,
-        rate: u64,
         fee_sats_per_vbyte: Amount,
         (collateral_amount, collateral_inputs): (Amount, Vec<Input>),
+        (principal_amount, principal_inputs): (Amount, Vec<Input>),
+        repayment_amount: Amount,
+        min_collateral_price: u64,
         (borrower_pk, borrower_address): (PublicKey, Address),
         timelock: u32,
     ) -> Result<Lender1>
     where
         R: RngCore + CryptoRng,
         C: Verification + Signing,
-        CS: FnOnce(Amount, AssetId) -> CF,
-        CF: Future<Output = Result<Vec<Input>>>,
     {
         let chain = Chain::new(&borrower_address, &self.address)?;
 
-        // TODO: This API should change so that the caller can decide on all this outside of this library
-        let LoanAmounts {
-            principal: principal_amount,
-            repayment: repayment_amount,
-            min_price_btc,
-        } = Lender0::calculate_loan_amounts(collateral_amount, rate, 20, 10)?;
         let collateral_inputs = collateral_inputs
             .into_iter()
             .map(|input| input.into_unblinded_input(secp))
@@ -980,7 +982,6 @@ impl Lender0 {
             .iter()
             .map(|input| (input.txout.asset, &input.secrets));
 
-        let principal_inputs = coin_selector(principal_amount, self.usdt_asset_id).await?;
         let unblinded_principal_inputs = principal_inputs
             .clone()
             .into_iter()
@@ -1032,7 +1033,7 @@ impl Lender0 {
             timelock,
             (repayment_principal_output, self.address_blinder),
             self.oracle_pk,
-            min_price_btc,
+            min_collateral_price,
             contract_creation_timestamp,
             chain,
         )
@@ -1225,7 +1226,7 @@ impl Lender0 {
         let repayment = Decimal::from(principal.as_sat()) * interest_factor;
 
         let min_price_btc = repayment.checked_div(btc).context("division overflow")?;
-        let min_price_btc = min_price_btc
+        let min_collateral_price = min_price_btc
             .to_u64()
             .context("decimal cannot be represented as u64")?;
 
@@ -1237,7 +1238,7 @@ impl Lender0 {
         Ok(LoanAmounts {
             principal,
             repayment,
-            min_price_btc,
+            min_collateral_price,
         })
     }
 }
@@ -1249,7 +1250,7 @@ struct LoanAmounts {
     repayment: Amount,
     /// Price under which the lender will be able to unilaterally
     /// liquidate the collateral contract, in whole USD.
-    min_price_btc: u64,
+    min_collateral_price: u64,
 }
 
 pub struct Lender1 {
