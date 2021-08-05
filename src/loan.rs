@@ -211,7 +211,7 @@ impl CollateralContract {
         identity_signer: S,
     ) -> Result<()>
     where
-        S: FnOnce(secp256k1::Message) -> SF,
+        S: FnOnce(secp256k1_zkp::Message) -> SF,
         SF: Future<Output = Result<Signature>>,
     {
         let transaction_cloned = transaction.clone();
@@ -243,7 +243,7 @@ impl CollateralContract {
         identity_signer: S,
     ) -> Result<()>
     where
-        S: FnOnce(secp256k1::Message) -> SF,
+        S: FnOnce(secp256k1_zkp::Message) -> SF,
         SF: Future<Output = Result<Signature>>,
     {
         let transaction_cloned = transaction.clone();
@@ -278,7 +278,7 @@ impl CollateralContract {
         oracle_sig: Signature,
     ) -> Result<()>
     where
-        S: FnOnce(secp256k1::Message) -> SF,
+        S: FnOnce(secp256k1_zkp::Message) -> SF,
         SF: Future<Output = Result<Signature>>,
     {
         let btc_price = oracle_msg.price_to_bytes();
@@ -330,7 +330,7 @@ impl CollateralContract {
         cov_script: &'a Script,
     ) -> Result<impl Satisfier<PublicKey> + 'a>
     where
-        S: FnOnce(secp256k1::Message) -> SF,
+        S: FnOnce(secp256k1_zkp::Message) -> SF,
         SF: Future<Output = Result<Signature>>,
     {
         let descriptor_cov = &self.descriptor.as_cov().expect("covenant descriptor");

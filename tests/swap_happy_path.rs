@@ -5,7 +5,7 @@ use elements::bitcoin::Amount;
 use elements::{bitcoin, Address, AddressParams};
 use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
-use secp256k1::SECP256K1;
+use secp256k1_zkp::SECP256K1;
 use util::{make_keypair, Wallet};
 
 mod util;

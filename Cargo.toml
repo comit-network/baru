@@ -21,7 +21,6 @@ hmac = "0.10"
 log = "0.4"
 rand = "0.6"
 rust_decimal = "1"
-secp256k1 = { version = "0.20", features = ["bitcoin_hashes", "rand"] }
 secp256k1-zkp = { version = "0.4", features = ["global-context", "hashes"] } # TODO: See if we can remove this direct dependency
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.9"

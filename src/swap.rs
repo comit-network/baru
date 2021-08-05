@@ -9,8 +9,8 @@ use elements::sighash::SigHashCache;
 use elements::{
     confidential, opcodes, Address, AssetId, SigHashType, Transaction, TxIn, TxOut, TxOutSecrets,
 };
-use secp256k1::rand::{CryptoRng, RngCore};
-use secp256k1::{Secp256k1, SecretKey, Signing, Verification};
+use rand::{CryptoRng, RngCore};
+use secp256k1_zkp::{Secp256k1, SecretKey, Signing, Verification};
 use std::future::Future;
 
 // TODO: Replace this with a PSET
