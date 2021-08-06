@@ -14,14 +14,11 @@ anyhow = "1"
 conquer-once = "0.3"
 elements = { version = "0.18", features = ["serde-feature"] }
 elements-miniscript = { version = "0.1", features = ["use-serde"] }
-env_logger = "0.8.3"
 hex = "0.4"
-hmac = "0.10"
 log = "0.4"
 rand = "0.6"
 rust_decimal = "1"
 serde = { version = "1", features = ["derive"] }
-sha2 = "0.9"
 thiserror = "1"
 
 [dev-dependencies]
