@@ -55,3 +55,36 @@ jobs:
 
       - name: Cargo test workspace
         run: cargo test --workspace --all-features
+
+  wasm_build_baru:
+    strategy:
+      matrix:
+        target: [ x86_64-unknown-linux-gnu, x86_64-apple-darwin ]
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          override: true
+          toolchain: stable
+          target: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v1.3.0
+
+      - name: Set CC and AR vars for MacOs
+        if: contains(matrix.os, 'macos')
+        run: |
+          echo "CC=/usr/local/opt/llvm/bin/clang" >> $GITHUB_ENV
+          echo "AR=/usr/local/opt/llvm/bin/llvm-ar" >> $GITHUB_ENV
+
+      - name: Cargo build baru for wasm32-unknown-unknown
+        run: cargo build -p baru --all-features --target wasm32-unknown-unknown
