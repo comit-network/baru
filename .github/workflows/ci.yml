@@ -26,7 +26,7 @@ jobs:
       - name: Run clippy with default features
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-  build_test_workspace:
+  test_worspace:
     strategy:
       matrix:
         target: [ x86_64-unknown-linux-gnu, x86_64-apple-darwin ]
@@ -49,10 +49,5 @@ jobs:
 
       - uses: Swatinem/rust-cache@v1.3.0
 
-      - name: Cargo test (all workspace)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Cargo test workspace
         run: cargo test --workspace --all-features
-
-      - name: Cargo build
-        if: matrix.os == 'macos-latest'
-        run: cargo build --workspace --all-features
