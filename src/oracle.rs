@@ -27,10 +27,10 @@ impl Message {
     }
 
     pub fn message_hash(&self) -> secp256k1_zkp::Message {
-        let mut sha256d = sha256::Hash::engine();
-        sha256d.input(&self.price_to_bytes());
-        sha256d.input(&self.timestamp_to_bytes());
-        let message_hash = sha256::Hash::from_engine(sha256d);
+        let mut sha256 = sha256::Hash::engine();
+        sha256.input(&self.price_to_bytes());
+        sha256.input(&self.timestamp_to_bytes());
+        let message_hash = sha256::Hash::from_engine(sha256);
 
         secp256k1_zkp::Message::from_slice(&message_hash).unwrap()
     }
