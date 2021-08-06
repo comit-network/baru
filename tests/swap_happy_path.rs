@@ -2,10 +2,10 @@ extern crate link_cplusplus;
 
 use baru::swap::{alice_finalize_transaction, bob_create_transaction, Actor};
 use elements::bitcoin::Amount;
+use elements::secp256k1_zkp::SECP256K1;
 use elements::{bitcoin, Address, AddressParams};
 use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
-use secp256k1::SECP256K1;
 use util::{make_keypair, Wallet};
 
 mod util;

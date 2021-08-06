@@ -1,4 +1,5 @@
-use secp256k1_zkp::SECP256K1;
+use elements::hashes::{sha256, Hash, HashEngine};
+use elements::secp256k1_zkp::{self, SECP256K1};
 
 pub struct Message {
     /// Price of bitcoin in whole USD.
@@ -25,18 +26,16 @@ impl Message {
         self.timestamp.serialize()
     }
 
-    pub fn message_hash(&self) -> secp256k1::Message {
-        use bitcoin_hashes::{sha256, Hash, HashEngine};
+    pub fn message_hash(&self) -> secp256k1_zkp::Message {
+        let mut sha256 = sha256::Hash::engine();
+        sha256.input(&self.price_to_bytes());
+        sha256.input(&self.timestamp_to_bytes());
+        let message_hash = sha256::Hash::from_engine(sha256);
 
-        let mut sha256d = sha256::Hash::engine();
-        sha256d.input(&self.price_to_bytes());
-        sha256d.input(&self.timestamp_to_bytes());
-        let message_hash = sha256::Hash::from_engine(sha256d);
-
-        secp256k1::Message::from_slice(&message_hash).unwrap()
+        secp256k1_zkp::Message::from_slice(&message_hash).unwrap()
     }
 
-    pub fn sign(&self, key: &secp256k1::SecretKey) -> secp256k1::Signature {
+    pub fn sign(&self, key: &secp256k1_zkp::SecretKey) -> secp256k1_zkp::Signature {
         let hashed_msg = self.message_hash();
 
         SECP256K1.sign(&hashed_msg, key)

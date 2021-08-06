@@ -4,13 +4,12 @@ use anyhow::{bail, Context, Result};
 use elements::bitcoin::Amount;
 use elements::hashes::{hash160, Hash};
 use elements::script::Builder;
-use elements::secp256k1_zkp::{Message, PublicKey};
+use elements::secp256k1_zkp::{Message, PublicKey, Secp256k1, SecretKey, Signing, Verification};
 use elements::sighash::SigHashCache;
 use elements::{
     confidential, opcodes, Address, AssetId, SigHashType, Transaction, TxIn, TxOut, TxOutSecrets,
 };
-use secp256k1::rand::{CryptoRng, RngCore};
-use secp256k1::{Secp256k1, SecretKey, Signing, Verification};
+use rand::{CryptoRng, RngCore};
 use std::future::Future;
 
 // TODO: Replace this with a PSET

@@ -2,11 +2,11 @@ use crate::estimate_transaction_size::estimate_virtual_size;
 use crate::input::Input;
 use crate::oracle;
 use anyhow::{anyhow, bail, Context, Result};
-use bitcoin_hashes::hex::ToHex;
 use conquer_once::Lazy;
 use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
 use elements::confidential::{self, Asset, AssetBlindingFactor, ValueBlindingFactor};
 use elements::encode::serialize;
+use elements::hashes::hex::ToHex;
 use elements::pset::serialize::Serialize;
 use elements::script::Builder;
 use elements::secp256k1_zkp::{self, Secp256k1, SecretKey, Signing, Verification, SECP256K1};
@@ -211,7 +211,7 @@ impl CollateralContract {
         identity_signer: S,
     ) -> Result<()>
     where
-        S: FnOnce(secp256k1::Message) -> SF,
+        S: FnOnce(secp256k1_zkp::Message) -> SF,
         SF: Future<Output = Result<Signature>>,
     {
         let transaction_cloned = transaction.clone();
@@ -243,7 +243,7 @@ impl CollateralContract {
         identity_signer: S,
     ) -> Result<()>
     where
-        S: FnOnce(secp256k1::Message) -> SF,
+        S: FnOnce(secp256k1_zkp::Message) -> SF,
         SF: Future<Output = Result<Signature>>,
     {
         let transaction_cloned = transaction.clone();
@@ -278,7 +278,7 @@ impl CollateralContract {
         oracle_sig: Signature,
     ) -> Result<()>
     where
-        S: FnOnce(secp256k1::Message) -> SF,
+        S: FnOnce(secp256k1_zkp::Message) -> SF,
         SF: Future<Output = Result<Signature>>,
     {
         let btc_price = oracle_msg.price_to_bytes();
@@ -330,7 +330,7 @@ impl CollateralContract {
         cov_script: &'a Script,
     ) -> Result<impl Satisfier<PublicKey> + 'a>
     where
-        S: FnOnce(secp256k1::Message) -> SF,
+        S: FnOnce(secp256k1_zkp::Message) -> SF,
         SF: Future<Output = Result<Signature>>,
     {
         let descriptor_cov = &self.descriptor.as_cov().expect("covenant descriptor");

@@ -6,7 +6,7 @@ use elements::bitcoin::util::psbt::serialize::Serialize;
 use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
 use elements::confidential::{Asset, AssetBlindingFactor, ValueBlindingFactor};
 use elements::hashes::Hash;
-use elements::secp256k1_zkp::{SecretKey, SECP256K1};
+use elements::secp256k1_zkp::{self, SecretKey, SECP256K1};
 use elements::sighash::SigHashCache;
 use elements::{
     Address, AddressParams, AssetId, OutPoint, SigHashType, Transaction, TxOut, TxOutSecrets, Txid,
