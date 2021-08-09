@@ -23,6 +23,7 @@ async fn current_ask_price(mut conn: Connection<db::Signatures>) -> Json<db::USD
         select
             timestamp,
             ask_price as price,
+            units,
             ask_signature as signature
         from signatures
         order by timestamp desc
@@ -35,6 +36,7 @@ async fn current_ask_price(mut conn: Connection<db::Signatures>) -> Json<db::USD
     let res = db::USDTickerResponse {
         timestamp: row.timestamp.try_into().unwrap(),
         price: row.price.try_into().unwrap(),
+        units: row.units,
         signature: Signature::from_compact(&row.signature).unwrap(),
     };
 
@@ -48,6 +50,7 @@ async fn current_bid_price(mut conn: Connection<db::Signatures>) -> Json<db::USD
         select
             timestamp,
             bid_price as price,
+            units,
             bid_signature as signature
         from signatures
         order by timestamp desc
@@ -60,6 +63,7 @@ async fn current_bid_price(mut conn: Connection<db::Signatures>) -> Json<db::USD
     let res = db::USDTickerResponse {
         timestamp: row.timestamp.try_into().unwrap(),
         price: row.price.try_into().unwrap(),
+        units: row.units,
         signature: Signature::from_compact(&row.signature).unwrap(),
     };
 
@@ -98,6 +102,7 @@ async fn ask_price_at_time(
         select
           timestamp,
           ask_price as price,
+          units,
           ask_signature as signature
         from opts
         order by abs(? - timestamp)
@@ -113,6 +118,7 @@ async fn ask_price_at_time(
     let res = db::USDTickerResponse {
         timestamp: row.timestamp.try_into().unwrap(),
         price: row.price.try_into().unwrap(),
+        units: row.units,
         signature: Signature::from_compact(&row.signature).unwrap(),
     };
 
@@ -151,6 +157,7 @@ async fn bid_price_at_time(
         select
           timestamp,
           bid_price as price,
+          units,
           bid_signature as signature
         from opts
         order by abs(? - timestamp)
@@ -166,6 +173,7 @@ async fn bid_price_at_time(
     let res = db::USDTickerResponse {
         timestamp: row.timestamp.try_into().unwrap(),
         price: row.price.try_into().unwrap(),
+        units: row.units,
         signature: Signature::from_compact(&row.signature).unwrap(),
     };
 

@@ -2,7 +2,8 @@ use elements::hashes::{sha256, Hash, HashEngine};
 use elements::secp256k1_zkp::{self, SECP256K1};
 
 pub struct Message {
-    /// Price of bitcoin in whole USD.
+    /// Price of bitcoin in millicents, where
+    /// USD1.00 = 10_000 millicents.
     btc_price: WitnessStackInteger,
     /// UNIX timestamp.
     timestamp: WitnessStackInteger,
