@@ -29,10 +29,16 @@ impl Wallet {
         let spent_utxo_secrets = {
             let abf = AssetBlindingFactor::new(&mut rng);
             let vbf = ValueBlindingFactor::new(&mut rng);
-            let secrets = TxOutSecrets::new(asset, abf, amount.as_sat(), vbf);
-            let asset = Asset::new_confidential(SECP256K1, asset, abf);
 
-            [(asset, secrets)]
+            // we don't have to prove the entire history of these
+            // coins, so any value works here
+            let value = 0;
+
+            let secrets = TxOutSecrets::new(asset, abf, value, vbf);
+
+            let asset_commitment = Asset::new_confidential(SECP256K1, asset, abf);
+
+            [(asset_commitment, secrets)]
         };
 
         let (original_txout, _, _) = TxOut::new_last_confidential(
