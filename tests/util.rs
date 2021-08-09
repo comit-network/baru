@@ -121,26 +121,48 @@ impl Wallet {
         tx_to_sign
     }
 
-    pub fn verify_all_inputs_spend_correctly(&self, tx: &Transaction) -> Result<()> {
-        for (index, txin) in tx.input.iter().enumerate() {
-            let input = self
-                .utxos
-                .iter()
-                .map(|(input, _, _)| input)
-                .find(|input| input.txin == txin.previous_output)
-                .context("at least one input doesn't come from this wallet")?;
+    pub fn verify_wallet_transaction(&self, tx: &Transaction) -> Result<()> {
+        let inputs = tx
+            .input
+            .iter()
+            .enumerate()
+            .map(|(index, txin)| {
+                let input = self
+                    .utxos
+                    .iter()
+                    .map(|(input, _, _)| input)
+                    .find(|input| input.txin == txin.previous_output)
+                    .context("at least one input doesn't come from this wallet")?;
 
-            elements_consensus::verify(
-                input.original_txout.script_pubkey.clone(),
-                &input.original_txout.value,
-                index,
-                tx,
-            )
-            .expect("input index out of bounds")
-            .with_context(|| format!("input {} of transaction incorrectly signed", index))?;
-        }
+                elements_consensus::verify(
+                    input.original_txout.script_pubkey.clone(),
+                    &input.original_txout.value,
+                    index,
+                    tx,
+                )
+                .expect("input index out of bounds")
+                .with_context(|| format!("input {} of transaction incorrectly signed", index))?;
+
+                Ok(input.original_txout.clone())
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        tx.verify_tx_amt_proofs(SECP256K1, &inputs)
+            .context("wallet transaction amounts or assets don't add up")?;
 
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn used_txouts(&self, tx: &Transaction) -> Vec<TxOut> {
+        tx.input
+            .iter()
+            .filter_map(|txin| {
+                self.utxos.iter().find_map(|(input, _, _)| {
+                    (input.txin == txin.previous_output).then(|| input.original_txout.clone())
+                })
+            })
+            .collect()
     }
 }
 

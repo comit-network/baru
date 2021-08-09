@@ -8,7 +8,7 @@ use baru::loan::{Borrower0, CollateralContract, Lender0};
 use baru::oracle;
 use elements::bitcoin::Amount;
 use elements::secp256k1_zkp::SECP256K1;
-use elements::{Address, AddressParams, Transaction};
+use elements::{Address, AddressParams, Transaction, TxOut};
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use util::{make_keypair, Wallet};
@@ -109,7 +109,7 @@ async fn borrow_and_repay() {
         .unwrap();
 
     wallet
-        .verify_all_inputs_spend_correctly(&loan_transaction)
+        .verify_wallet_transaction(&loan_transaction)
         .expect("loan transaction to be correctly signed");
 
     let wallet = Arc::new(Mutex::new(wallet));
@@ -125,6 +125,7 @@ async fn borrow_and_repay() {
                 }
             },
             {
+                let wallet = wallet.clone();
                 |tx| async move {
                     let wallet = wallet.lock().unwrap();
                     Ok(wallet.sign_inputs(tx))
@@ -135,10 +136,15 @@ async fn borrow_and_repay() {
         .await
         .unwrap();
 
-    verify_collateral_output_spend(
+    let wallet_inputs = {
+        let wallet = wallet.lock().unwrap();
+        &wallet.used_txouts(&loan_repayment_transaction)
+    };
+    verify_spend_transaction(
         &loan_repayment_transaction,
         &loan_transaction,
         borrower.collateral_contract(),
+        wallet_inputs,
     )
     .expect("repayment transaction to spend collateral correctly");
 }
@@ -237,7 +243,7 @@ async fn lend_and_liquidate() {
         .unwrap();
 
     wallet
-        .verify_all_inputs_spend_correctly(&loan_transaction)
+        .verify_wallet_transaction(&loan_transaction)
         .expect("loan transaction to be correctly signed");
 
     let liquidation_transaction = lender
@@ -245,10 +251,11 @@ async fn lend_and_liquidate() {
         .await
         .unwrap();
 
-    verify_collateral_output_spend(
+    verify_spend_transaction(
         &liquidation_transaction,
         &loan_transaction,
         lender.collateral_contract(),
+        &wallet.used_txouts(&liquidation_transaction),
     )
     .expect("liquidation transaction to spend collateral correctly");
 }
@@ -347,7 +354,7 @@ async fn lend_and_dynamic_liquidate() {
         .unwrap();
 
     wallet
-        .verify_all_inputs_spend_correctly(&loan_transaction)
+        .verify_wallet_transaction(&loan_transaction)
         .expect("loan transaction to be correctly signed");
 
     // Oracle message too early:
@@ -375,10 +382,11 @@ async fn lend_and_dynamic_liquidate() {
             .await
             .unwrap();
 
-        verify_collateral_output_spend(
+        verify_spend_transaction(
             &liquidation_transaction,
             &loan_transaction,
             lender.collateral_contract(),
+            &wallet.used_txouts(&liquidation_transaction),
         )
         .expect_err("could liquidate with proof of dip before contract creation");
     }
@@ -408,10 +416,11 @@ async fn lend_and_dynamic_liquidate() {
             .await
             .unwrap();
 
-        verify_collateral_output_spend(
+        verify_spend_transaction(
             &liquidation_transaction,
             &loan_transaction,
             lender.collateral_contract(),
+            &wallet.used_txouts(&liquidation_transaction),
         )
         .expect_err("could liquidate with proof of dip above threshold");
     }
@@ -444,10 +453,11 @@ async fn lend_and_dynamic_liquidate() {
             .await
             .unwrap();
 
-        verify_collateral_output_spend(
+        verify_spend_transaction(
             &liquidation_transaction,
             &loan_transaction,
             lender.collateral_contract(),
+            &wallet.used_txouts(&liquidation_transaction),
         )
         .expect_err("could liquidate with invalid proof of dip");
     }
@@ -477,19 +487,21 @@ async fn lend_and_dynamic_liquidate() {
             .await
             .unwrap();
 
-        verify_collateral_output_spend(
+        verify_spend_transaction(
             &liquidation_transaction,
             &loan_transaction,
             lender.collateral_contract(),
+            &wallet.used_txouts(&liquidation_transaction),
         )
         .expect("dynamic liquidation transaction to spend collateral correctly");
     }
 }
 
-fn verify_collateral_output_spend(
+fn verify_spend_transaction(
     spend_transaction: &Transaction,
     loan_transaction: &Transaction,
     collateral_contract: &CollateralContract,
+    wallet_inputs: &[TxOut],
 ) -> Result<()> {
     let (vin, collateral) = spend_transaction
         .input
@@ -514,6 +526,12 @@ fn verify_collateral_output_spend(
     )
     .expect("input index out of bounds")
     .context("spend transaction cannot spend collateral output")?;
+
+    let spend_inputs = vec![wallet_inputs, &[collateral.clone()]].concat();
+
+    spend_transaction
+        .verify_tx_amt_proofs(SECP256K1, &spend_inputs)
+        .expect("spend transaction amounts or assets don't add up");
 
     Ok(())
 }
