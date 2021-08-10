@@ -39,7 +39,13 @@ async fn borrow_and_repay() {
             &mut rng,
             {
                 let wallet = &mut wallet;
-                |amount, asset| async move { wallet.coin_select(amount, asset) }
+                |amount, asset| async move {
+                    wallet.coin_select(
+                        // we need extra coins to pay for the fee
+                        amount + Amount::from_sat(10_000),
+                        asset,
+                    )
+                }
             },
             address,
             blinding_sk,
@@ -173,7 +179,13 @@ async fn lend_and_liquidate() {
             &mut rng,
             {
                 let wallet = &mut wallet;
-                |amount, asset| async move { wallet.coin_select(amount, asset) }
+                |amount, asset| async move {
+                    wallet.coin_select(
+                        // we need extra coins to pay for the fee
+                        amount + Amount::from_sat(10_000),
+                        asset,
+                    )
+                }
             },
             address,
             blinding_sk,
@@ -284,7 +296,13 @@ async fn lend_and_dynamic_liquidate() {
             &mut rng,
             {
                 let wallet = &mut wallet;
-                |amount, asset| async move { wallet.coin_select(amount, asset) }
+                |amount, asset| async move {
+                    wallet.coin_select(
+                        // we need extra coins to pay for the fee
+                        amount + Amount::from_sat(10_000),
+                        asset,
+                    )
+                }
             },
             address,
             blinding_sk,
@@ -495,6 +513,156 @@ async fn lend_and_dynamic_liquidate() {
         )
         .expect("dynamic liquidation transaction to spend collateral correctly");
     }
+}
+
+#[tokio::test]
+async fn can_run_protocol_with_principal_change_outputs() {
+    let mut rng = ChaChaRng::seed_from_u64(0);
+
+    let bitcoin_asset_id = "0c5d451941f37b801d04c46920f2bc5bbd3986e5f56cb56c6b17bedc655e9fc6"
+        .parse()
+        .unwrap();
+    let usdt_asset_id = "6b397062b69411b554ec398ae3b25fdc54fab1805126786581a56a7746afbab2"
+        .parse()
+        .unwrap();
+    let (_oracle_sk, oracle_pk) = make_keypair(&mut rng);
+
+    let mut wallet = Wallet::default();
+    let borrower = {
+        let (_sk, pk) = make_keypair(&mut rng);
+        let (blinding_sk, blinding_pk) = make_keypair(&mut rng);
+        let address = Address::p2pkh(&pk, Some(blinding_pk.key), &AddressParams::LIQUID);
+
+        let collateral_amount = Amount::ONE_BTC;
+
+        Borrower0::new(
+            &mut rng,
+            {
+                let wallet = &mut wallet;
+                |amount, asset| async move {
+                    wallet.coin_select(
+                        // we need extra coins to pay for the fee
+                        amount + Amount::from_sat(10_000),
+                        asset,
+                    )
+                }
+            },
+            address,
+            blinding_sk,
+            collateral_amount,
+            Amount::ONE_SAT,
+            bitcoin_asset_id,
+            usdt_asset_id,
+        )
+        .await
+        .unwrap()
+    };
+
+    let (lender, _lender_address) = {
+        let (_sk, pk) = make_keypair(&mut rng);
+        let (blinding_sk, blinding_pk) = make_keypair(&mut rng);
+        let address = Address::p2pkh(&pk, Some(blinding_pk.key), &AddressParams::LIQUID);
+
+        let lender = Lender0::new(
+            &mut rng,
+            bitcoin_asset_id,
+            usdt_asset_id,
+            address.clone(),
+            blinding_sk,
+            oracle_pk,
+        )
+        .unwrap();
+
+        (lender, address)
+    };
+
+    let timelock = 10;
+    let principal_amount = Amount::from_btc(38_000.0).unwrap();
+    let principal_inputs = wallet
+        .coin_select(
+            // force presence of principal change output by providing
+            // more coins than necessary
+            principal_amount + Amount::from_sat(10_000),
+            usdt_asset_id,
+        )
+        .unwrap();
+    let repayment_amount = principal_amount + Amount::from_btc(1_000.0).unwrap();
+    let min_collateral_price = 38_000;
+
+    let lender = lender
+        .build_loan_transaction(
+            &mut rng,
+            SECP256K1,
+            borrower.fee_sats_per_vbyte(),
+            (
+                *borrower.collateral_amount(),
+                borrower.collateral_inputs().to_vec(),
+            ),
+            (principal_amount, principal_inputs),
+            repayment_amount,
+            min_collateral_price,
+            (borrower.pk(), borrower.address().clone()),
+            timelock,
+        )
+        .await
+        .unwrap();
+    let loan_response = lender.loan_response();
+
+    let borrower = borrower.interpret(SECP256K1, loan_response).unwrap();
+    let loan_transaction = borrower
+        .sign(|tx| async { Ok(wallet.sign_inputs(tx)) })
+        .await
+        .unwrap();
+
+    let loan_transaction = lender
+        .finalise_loan(loan_transaction, {
+            |tx| async { Ok(wallet.sign_inputs(tx)) }
+        })
+        .await
+        .unwrap();
+
+    wallet
+        .verify_wallet_transaction(&loan_transaction)
+        .expect("loan transaction to be correctly signed");
+
+    // only the repayment branch could add change outputs, so we ignore the others
+    let wallet = Arc::new(Mutex::new(wallet.clone()));
+    let loan_repayment_transaction = borrower
+        .loan_repayment_transaction(
+            &mut rng,
+            SECP256K1,
+            {
+                let wallet = wallet.clone();
+                |amount, asset| async move {
+                    let mut wallet = wallet.lock().unwrap();
+                    // force presence of principal change output by providing
+                    // more coins than necessary
+                    wallet.coin_select(amount + Amount::from_sat(10_000), asset)
+                }
+            },
+            {
+                let wallet = wallet.clone();
+                |tx| async move {
+                    let wallet = wallet.lock().unwrap();
+                    Ok(wallet.sign_inputs(tx))
+                }
+            },
+            Amount::ONE_SAT,
+        )
+        .await
+        .unwrap();
+
+    let wallet_inputs = {
+        let wallet = wallet.lock().unwrap();
+        &wallet.used_txouts(&loan_repayment_transaction)
+    };
+    verify_spend_transaction(
+        &loan_repayment_transaction,
+        &loan_transaction,
+        borrower.collateral_contract(),
+        wallet_inputs,
+    )
+    .expect("repayment transaction to spend collateral correctly");
 }
 
 fn verify_spend_transaction(

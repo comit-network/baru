@@ -536,17 +536,20 @@ impl Borrower0 {
     {
         let transaction = loan_response.transaction;
 
-        let principal_amount = transaction
-            .output
-            .iter()
-            .find_map(|out| {
+        let principal_amount = {
+            let expected_output = transaction.output.iter().find_map(|out| {
                 let unblinded_out = out.unblind(secp, self.address_blinding_sk).ok()?;
                 let is_principal_out = unblinded_out.asset == self.usdt_asset_id
                     && out.script_pubkey == self.address.script_pubkey();
 
-                is_principal_out.then(|| Amount::from_sat(unblinded_out.value))
-            })
-            .context("no principal txout")?;
+                is_principal_out.then(|| unblinded_out)
+            });
+
+            match expected_output {
+                Some(out) => Amount::from_sat(out.value),
+                None => bail!("could not find principal output"),
+            }
+        };
 
         let collateral_contract = loan_response.collateral_contract;
         let collateral_address = collateral_contract.address();
@@ -554,18 +557,18 @@ impl Borrower0 {
         let collateral_blinding_sk = loan_response.repayment_collateral_input.blinding_key;
         let collateral_script_pubkey = collateral_address.script_pubkey();
 
-        transaction
-            .output
-            .iter()
-            .find_map(|out| {
-                let unblinded_out = out.unblind(secp, collateral_blinding_sk).ok()?;
-                let is_collateral_out = unblinded_out.asset == self.bitcoin_asset_id
-                    && unblinded_out.value == self.collateral_amount.as_sat()
-                    && out.script_pubkey == collateral_script_pubkey;
+        let collateral_output = transaction.output.iter().find_map(|out| {
+            let unblinded_out = out.unblind(secp, collateral_blinding_sk).ok()?;
+            let is_collateral_out = unblinded_out.asset == self.bitcoin_asset_id
+                && unblinded_out.value == self.collateral_amount.as_sat()
+                && out.script_pubkey == collateral_script_pubkey;
 
-                is_collateral_out.then(|| out)
-            })
-            .context("no collateral txout")?;
+            is_collateral_out.then(|| out)
+        });
+
+        if collateral_output.is_none() {
+            bail!("could not find collateral output")
+        }
 
         let collateral_input_amount = self
             .collateral_inputs
@@ -590,18 +593,23 @@ impl Borrower0 {
                 )
             })?;
 
-        transaction
-            .output
-            .iter()
-            .find_map(|out| {
+        if collateral_change_amount != Amount::ZERO {
+            let expected_output = transaction.output.iter().find_map(|out| {
                 let unblinded_out = out.unblind(secp, self.address_blinding_sk).ok()?;
                 let is_collateral_change_out = unblinded_out.asset == self.bitcoin_asset_id
                     && unblinded_out.value == collateral_change_amount.as_sat()
                     && out.script_pubkey == self.address.script_pubkey();
 
                 is_collateral_change_out.then(|| out)
-            })
-            .context("no collateral change txout")?;
+            });
+
+            if expected_output.is_none() {
+                bail!(
+                    "could not find collateral change output with amount {}",
+                    collateral_change_amount
+                )
+            }
+        }
 
         Ok(Borrower1 {
             keypair: self.keypair,
@@ -994,6 +1002,10 @@ impl Lender0 {
             .collect::<Vec<_>>();
 
         let inputs = borrower_inputs.chain(lender_inputs).collect::<Vec<_>>();
+        let inputs_not_last_confidential = inputs
+            .iter()
+            .map(|(asset, secrets)| (*asset, Some(*secrets)))
+            .collect::<Vec<_>>();
 
         let collateral_input_amount = collateral_inputs
             .iter()
@@ -1028,6 +1040,104 @@ impl Lender0 {
         let now = std::time::SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
         let contract_creation_timestamp = now.as_secs() + 300;
 
+        let (principal_tx_out, abf_principal, vbf_principal) = TxOut::new_not_last_confidential(
+            rng,
+            secp,
+            principal_amount.as_sat(),
+            borrower_address.clone(),
+            self.usdt_asset_id,
+            inputs_not_last_confidential.as_slice(),
+        )
+        .context("could not construct principal txout")?;
+
+        let tx_fee = Amount::from_sat(
+            estimate_virtual_size(inputs.len() as u64, 4) * fee_sats_per_vbyte.as_sat(),
+        );
+
+        let principal_input_amount = unblinded_principal_inputs
+            .iter()
+            .fold(0, |sum, input| sum + input.secrets.value);
+        let principal_change_amount = Amount::from_sat(principal_input_amount) - principal_amount;
+
+        let collateral_change_amount = Amount::from_sat(collateral_input_amount)
+            .checked_sub(collateral_amount)
+            .map(|a| a.checked_sub(tx_fee))
+            .flatten()
+            .with_context(|| {
+                format!(
+                    "cannot pay for output {} and fee {} with input {}",
+                    collateral_amount, tx_fee, collateral_input_amount,
+                )
+            })?;
+
+        let mut tx_outs = vec![principal_tx_out];
+        let mut before_last_confidential_output_secrets = vec![TxOutSecrets::new(
+            self.usdt_asset_id,
+            abf_principal,
+            principal_amount.as_sat(),
+            vbf_principal,
+        )];
+
+        if collateral_change_amount == Amount::ZERO {
+            log::info!(
+                "No change output needed for collateral asset: {}",
+                self.bitcoin_asset_id
+            );
+        } else {
+            let (tx_out, abf, vbf) = TxOut::new_not_last_confidential(
+                rng,
+                secp,
+                collateral_change_amount.as_sat(),
+                borrower_address,
+                self.bitcoin_asset_id,
+                &inputs_not_last_confidential,
+            )
+            .with_context(|| {
+                format!(
+                    "could not construct change output for collateral asset: {}",
+                    self.bitcoin_asset_id
+                )
+            })?;
+
+            tx_outs.push(tx_out);
+            before_last_confidential_output_secrets.push(TxOutSecrets::new(
+                self.bitcoin_asset_id,
+                abf,
+                collateral_change_amount.as_sat(),
+                vbf,
+            ))
+        }
+
+        if principal_change_amount == Amount::ZERO {
+            log::info!(
+                "No change output needed for principal asset: {}",
+                self.usdt_asset_id
+            );
+        } else {
+            let (tx_out, abf, vbf) = TxOut::new_not_last_confidential(
+                rng,
+                secp,
+                principal_change_amount.as_sat(),
+                self.address.clone(),
+                self.usdt_asset_id,
+                &inputs_not_last_confidential,
+            )
+            .with_context(|| {
+                format!(
+                    "could not construct change output for principal asset: {}",
+                    self.usdt_asset_id
+                )
+            })?;
+
+            tx_outs.push(tx_out);
+            before_last_confidential_output_secrets.push(TxOutSecrets::new(
+                self.usdt_asset_id,
+                abf,
+                principal_change_amount.as_sat(),
+                vbf,
+            ))
+        }
+
         let collateral_contract = CollateralContract::new(
             borrower_pk,
             lender_pk,
@@ -1040,94 +1150,27 @@ impl Lender0 {
         )
         .context("could not build collateral contract")?;
         let collateral_address = collateral_contract.blinded_address(collateral_blinding_pk.key);
-
-        let inputs_not_last_confidential = inputs
-            .iter()
-            .map(|(asset, secrets)| (*asset, Some(*secrets)))
-            .collect::<Vec<_>>();
-        let (collateral_tx_out, abf_collateral, vbf_collateral) = TxOut::new_not_last_confidential(
+        let (collateral_tx_out, _, _) = TxOut::new_last_confidential(
             rng,
             secp,
             collateral_amount.as_sat(),
             collateral_address.clone(),
-            self.bitcoin_asset_id,
-            inputs_not_last_confidential.as_slice(),
-        )
-        .context("could not construct collateral txout")?;
-
-        let (principal_tx_out, abf_principal, vbf_principal) = TxOut::new_not_last_confidential(
-            rng,
-            secp,
-            principal_amount.as_sat(),
-            borrower_address.clone(),
-            self.usdt_asset_id,
-            inputs_not_last_confidential.as_slice(),
-        )
-        .context("could not construct principal txout")?;
-
-        let principal_input_amount = unblinded_principal_inputs
-            .iter()
-            .fold(0, |sum, input| sum + input.secrets.value);
-        let principal_change_amount = Amount::from_sat(principal_input_amount) - principal_amount;
-        let (principal_change_tx_out, abf_principal_change, vbf_principal_change) =
-            TxOut::new_not_last_confidential(
-                rng,
-                secp,
-                principal_change_amount.as_sat(),
-                self.address.clone(),
-                self.usdt_asset_id,
-                &inputs_not_last_confidential,
-            )
-            .context("could not construct principal change txout")?;
-
-        let not_last_confidential_outputs = [
-            &TxOutSecrets::new(
-                self.bitcoin_asset_id,
-                abf_collateral,
-                collateral_amount.as_sat(),
-                vbf_collateral,
-            ),
-            &TxOutSecrets::new(
-                self.usdt_asset_id,
-                abf_principal,
-                principal_amount.as_sat(),
-                vbf_principal,
-            ),
-            &TxOutSecrets::new(
-                self.usdt_asset_id,
-                abf_principal_change,
-                principal_change_amount.as_sat(),
-                vbf_principal_change,
-            ),
-        ];
-
-        let tx_fee = Amount::from_sat(
-            estimate_virtual_size(inputs.len() as u64, 4) * fee_sats_per_vbyte.as_sat(),
-        );
-        let collateral_change_amount = Amount::from_sat(collateral_input_amount)
-            .checked_sub(collateral_amount)
-            .map(|a| a.checked_sub(tx_fee))
-            .flatten()
-            .with_context(|| {
-                format!(
-                    "cannot pay for output {} and fee {} with input {}",
-                    collateral_amount, tx_fee, collateral_input_amount,
-                )
-            })?;
-        let (collateral_change_tx_out, _, _) = TxOut::new_last_confidential(
-            rng,
-            secp,
-            collateral_change_amount.as_sat(),
-            borrower_address,
             self.bitcoin_asset_id,
             inputs
                 .iter()
                 .map(|(asset, secrets)| (*asset, *secrets))
                 .collect::<Vec<_>>()
                 .as_slice(),
-            &not_last_confidential_outputs,
+            &before_last_confidential_output_secrets
+                .iter()
+                .collect::<Vec<_>>(),
         )
-        .context("Creation of collateral change output failed")?;
+        .context("could not construct collateral txout")?;
+
+        tx_outs.push(collateral_tx_out.clone());
+
+        let tx_fee_tx_out = TxOut::new_fee(tx_fee.as_sat(), self.bitcoin_asset_id);
+        tx_outs.push(tx_fee_tx_out);
 
         let tx_ins = {
             let borrower_inputs = collateral_inputs.iter().map(|input| input.txin);
@@ -1146,19 +1189,11 @@ impl Lender0 {
                 .collect::<Vec<_>>()
         };
 
-        let tx_fee_tx_out = TxOut::new_fee(tx_fee.as_sat(), self.bitcoin_asset_id);
-
         let loan_transaction = Transaction {
             version: 2,
             lock_time: 0,
             input: tx_ins,
-            output: vec![
-                collateral_tx_out.clone(),
-                principal_tx_out,
-                principal_change_tx_out,
-                collateral_change_tx_out,
-                tx_fee_tx_out,
-            ],
+            output: tx_outs,
         };
 
         let repayment_collateral_input = {

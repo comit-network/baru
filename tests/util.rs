@@ -19,6 +19,10 @@ pub struct Wallet {
 }
 
 impl Wallet {
+    /// Select inputs to pay for `amount` of `asset`.
+    ///
+    /// The corresponding UTXOs are generated ad hoc and subsequently
+    /// stored in the internal state of the wallet.
     pub fn coin_select(&mut self, amount: Amount, asset: AssetId) -> Result<Vec<Input>> {
         let mut rng = thread_rng();
 
@@ -44,7 +48,7 @@ impl Wallet {
         let (original_txout, _, _) = TxOut::new_last_confidential(
             &mut rng,
             SECP256K1,
-            amount.as_sat() + 10_000,
+            amount.as_sat(),
             address,
             asset,
             spent_utxo_secrets
