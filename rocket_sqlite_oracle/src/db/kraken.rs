@@ -257,7 +257,7 @@ mod wire {
 
     #[derive(Debug, Clone)]
     pub struct USDPrice {
-        pub millicents: u64,
+        pub exchange_rate: u64,
     }
 
     /// Represents an update within the price ticker.
@@ -302,7 +302,7 @@ mod wire {
             let dec = Decimal::from_str(s).unwrap().to_u64().unwrap();
             let dec = dec * 10_000;
 
-            Ok(USDPrice { millicents: dec })
+            Ok(USDPrice { exchange_rate: dec })
         }
     }
 

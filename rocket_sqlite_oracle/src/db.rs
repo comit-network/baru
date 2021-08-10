@@ -17,6 +17,7 @@ pub struct Signatures(sqlx::SqlitePool);
 pub struct USDTickerResponse {
     pub timestamp: u64,
     pub price: u64,
+    pub units: String,
     pub signature: Signature,
 }
 
@@ -48,17 +49,17 @@ pub async fn write_signatures(rocket: Rocket<Build>) -> fairing::Result {
         loop {
             match ticker.wait_for_next_update().await.unwrap() {
                 Ok(update) => {
-                    let ask_signature = Message::new(update.ask.millicents, update.timestamp)
+                    let ask_signature = Message::new(update.ask.exchange_rate, update.timestamp)
                         .sign(&key)
                         .serialize_compact()
                         .to_vec();
-                    let bid_signature = Message::new(update.bid.millicents, update.timestamp)
+                    let bid_signature = Message::new(update.bid.exchange_rate, update.timestamp)
                         .sign(&key)
                         .serialize_compact()
                         .to_vec();
                     let timestamp = i64::try_from(update.timestamp).unwrap();
-                    let ask = i64::try_from(update.ask.millicents).unwrap();
-                    let bid = i64::try_from(update.bid.millicents).unwrap();
+                    let ask = i64::try_from(update.ask.exchange_rate).unwrap();
+                    let bid = i64::try_from(update.bid.exchange_rate).unwrap();
                     sqlx::query!(
                         r"
                         insert into signatures (

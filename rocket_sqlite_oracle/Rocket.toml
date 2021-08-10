@@ -1,2 +1,2 @@
-[default.databases.example_signatures]
+[default.databases.signatures]
 url = "./db/signatures.sqlite"
