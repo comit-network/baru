@@ -10,19 +10,29 @@ license-file = "LICENSE"
 description = "Library to facilitate DeFi on Liquid"
 
 [dependencies]
+aes-gcm-siv = { version = "0.9", features = ["std"] }
 anyhow = "1"
+async-trait = "0.1"
+bdk = { version = "0.4", default-features = false }
+bip32 = { version = "0.2", features = ["secp256k1-ffi", "bip39"], default-features = false }
 conquer-once = "0.3"
 elements = { version = "0.18", features = ["serde-feature"] }
 elements-miniscript = { version = "0.1", features = ["use-serde"] }
+futures = "0.3"
 hex = "0.4"
+hkdf = { version = "0.10", features = ["std"] }
+itertools = "0.10"
 log = "0.4"
-rand = "0.6"
+rand = { version = "0.6", features = ["wasm-bindgen"] }
+reqwest = { version = "0.11", default-features = false, features = ["rustls", "json"] }
 rust_decimal = "1"
 serde = { version = "1", features = ["derive"] }
+sha2 = "0.9"
 thiserror = "1"
 
 [dev-dependencies]
 elements-consensus = { git = "https://github.com/comit-network/rust-elements-consensus", rev = "ac88dbedcd019eef44f58499417dcdbeda994b0b" }
 link-cplusplus = "1"
 rand_chacha = "0.1"
+serde_json = "1"
 tokio = { version = "1", default-features = false, features = ["macros", "rt"] }

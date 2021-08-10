@@ -482,9 +482,9 @@ pub struct Borrower0 {
 
 impl Borrower0 {
     #[allow(clippy::too_many_arguments)]
-    pub async fn new<R, CS, CF>(
+    pub async fn new<R>(
         rng: &mut R,
-        coin_selector: CS,
+        collateral_inputs: Vec<Input>,
         address: Address,
         address_blinding_sk: SecretKey,
         collateral_amount: Amount,
@@ -494,11 +494,8 @@ impl Borrower0 {
     ) -> Result<Self>
     where
         R: RngCore + CryptoRng,
-        CS: FnOnce(Amount, AssetId) -> CF,
-        CF: Future<Output = Result<Vec<Input>>>,
     {
         let keypair = make_keypair(rng);
-        let collateral_inputs = coin_selector(collateral_amount, bitcoin_asset_id).await?;
 
         Ok(Self {
             keypair,
@@ -922,7 +919,7 @@ impl Lender0 {
     /// Interpret a loan request and performs lender logic.
     ///
     /// rate is expressed in usdt sats per btc, i.e. rate = 1 BTC / USDT
-    #[deprecated(note = "Use interpret_loan_request instead", since = "0.3.0")]
+    #[deprecated(note = "Use build_loan_transaction instead", since = "0.3.0")]
     pub async fn interpret<R, C, CS, CF>(
         self,
         rng: &mut R,
