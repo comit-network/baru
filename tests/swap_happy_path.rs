@@ -74,7 +74,7 @@ async fn collaborative_create_and_sign() {
             .unwrap();
 
     wallet
-        .verify_all_inputs_spend_correctly(&transaction)
+        .verify_wallet_transaction(&transaction)
         .expect("to have correctly signed all inputs");
 }
 

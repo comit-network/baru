@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The loan transaction no longer expects collateral and principal change outputs.
+  We were unconditionally adding them to the transaction which could result in attempting to [build a 0-valued confidential transaction output, which is invalid](https://github.com/comit-network/baru/issues/38).
+
 ## [0.3.0] - 2021-08-06
 
 ### Added
