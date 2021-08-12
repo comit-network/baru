@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Wallet which allows users to select coins through a backend configured by them via the `GetUtxos` trait.
+  The provided wallet comes with a UTXO cache which this is updated using `Wallet::sync`.
+  This allows users of the library to optimise the number of requests to their backend.
+  Users can also sign said UTXOs by calling `Wallet::sign`.
+
+### Changed
+
+- The borrower can now choose the collateral inputs before calling `Borrower0::new`.
+
 ### Fixed
 
 - The loan transaction no longer expects collateral and principal change outputs.

@@ -37,16 +37,12 @@ async fn borrow_and_repay() {
 
         Borrower0::new(
             &mut rng,
-            {
-                let wallet = &mut wallet;
-                |amount, asset| async move {
-                    wallet.coin_select(
-                        // we need extra coins to pay for the fee
-                        amount + Amount::from_sat(10_000),
-                        asset,
-                    )
-                }
-            },
+            wallet
+                .coin_select(
+                    collateral_amount + Amount::from_sat(10_000),
+                    bitcoin_asset_id,
+                )
+                .unwrap(),
             address,
             blinding_sk,
             collateral_amount,
@@ -177,16 +173,12 @@ async fn lend_and_liquidate() {
 
         Borrower0::new(
             &mut rng,
-            {
-                let wallet = &mut wallet;
-                |amount, asset| async move {
-                    wallet.coin_select(
-                        // we need extra coins to pay for the fee
-                        amount + Amount::from_sat(10_000),
-                        asset,
-                    )
-                }
-            },
+            wallet
+                .coin_select(
+                    collateral_amount + Amount::from_sat(10_000),
+                    bitcoin_asset_id,
+                )
+                .unwrap(),
             address,
             blinding_sk,
             collateral_amount,
@@ -294,16 +286,12 @@ async fn lend_and_dynamic_liquidate() {
 
         Borrower0::new(
             &mut rng,
-            {
-                let wallet = &mut wallet;
-                |amount, asset| async move {
-                    wallet.coin_select(
-                        // we need extra coins to pay for the fee
-                        amount + Amount::from_sat(10_000),
-                        asset,
-                    )
-                }
-            },
+            wallet
+                .coin_select(
+                    collateral_amount + Amount::from_sat(10_000),
+                    bitcoin_asset_id,
+                )
+                .unwrap(),
             address,
             blinding_sk,
             collateral_amount,
@@ -537,16 +525,13 @@ async fn can_run_protocol_with_principal_change_outputs() {
 
         Borrower0::new(
             &mut rng,
-            {
-                let wallet = &mut wallet;
-                |amount, asset| async move {
-                    wallet.coin_select(
-                        // we need extra coins to pay for the fee
-                        amount + Amount::from_sat(10_000),
-                        asset,
-                    )
-                }
-            },
+            wallet
+                .coin_select(
+                    // we need extra coins to pay for the fee
+                    collateral_amount + Amount::from_sat(10_000),
+                    bitcoin_asset_id,
+                )
+                .unwrap(),
             address,
             blinding_sk,
             collateral_amount,
