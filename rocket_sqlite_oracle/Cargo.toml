@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 anyhow = "1"
 backoff = { version = "0.3", features = ["tokio"] }
-bitcoin = { version = "0.26", features = ["rand", "use-serde"] }
+bitcoin = { version = "0.27", features = ["rand", "use-serde"] }
 futures = { version = "0.3", default-features = false }
 rocket = { git = "https://github.com/SergioBenitez/Rocket", features = ["json"] }
 rocket_db_pools = { git = "https://github.com/SergioBenitez/Rocket", features = ["sqlx_sqlite"] }
