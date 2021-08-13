@@ -7,6 +7,7 @@ version = "0.3.0"
 authors = ["CoBloX Team <team@coblox.tech>"]
 edition = "2018"
 license-file = "LICENSE"
+resolver = "2"
 description = "Library to facilitate DeFi on Liquid"
 
 [dependencies]
@@ -33,6 +34,7 @@ thiserror = "1"
 [dev-dependencies]
 elements-consensus = { git = "https://github.com/comit-network/rust-elements-consensus", rev = "ac88dbedcd019eef44f58499417dcdbeda994b0b" }
 link-cplusplus = "1"
+proptest = { version = "1", default-features = false, features = ["std"] }
 rand_chacha = "0.1"
 serde_json = "1"
 tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
