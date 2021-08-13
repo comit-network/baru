@@ -21,7 +21,7 @@ elements = { version = "0.18", features = ["serde-feature"] }
 elements-miniscript = { version = "0.1", features = ["use-serde"] }
 futures = "0.3"
 hex = "0.4"
-hkdf = { version = "0.10", features = ["std"] }
+hkdf = { version = "0.11", features = ["std"] }
 itertools = "0.10"
 log = "0.4"
 rand = { version = "0.6", features = ["wasm-bindgen"] }
