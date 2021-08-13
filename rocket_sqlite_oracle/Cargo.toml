@@ -25,7 +25,7 @@ structopt = "0.3"
 thiserror = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "macros", "sync", "process", "fs", "net"] }
 tokio-socks = "0.5"
-tokio-tungstenite = { version = "0.14", features = ["rustls-tls"] }
+tokio-tungstenite = { version = "0.15", features = ["rustls-tls"] }
 tokio-util = { version = "0.6", features = ["io"] }
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = { version = "0.2", default-features = false, features = ["fmt", "ansi", "env-filter", "chrono", "tracing-log", "json"] }
