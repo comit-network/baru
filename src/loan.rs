@@ -929,7 +929,7 @@ impl Lender0 {
         secp: &Secp256k1<C>,
         coin_selector: CS,
         loan_request: LoanRequest,
-        timelock: u32,
+        timelock: Timelock,
         rate: u64,
     ) -> Result<Lender1>
     where
@@ -974,13 +974,14 @@ impl Lender0 {
         repayment_amount: Amount,
         min_collateral_price: u64,
         (borrower_pk, borrower_address): (PublicKey, Address),
-        timelock: u32,
+        timelock: impl Into<Timelock>,
     ) -> Result<Lender1>
     where
         R: RngCore + CryptoRng,
         C: Verification + Signing,
     {
         let chain = Chain::new(&borrower_address, &self.address)?;
+        let timelock = Into::<Timelock>::into(timelock);
 
         let collateral_inputs = collateral_inputs
             .into_iter()
@@ -1141,7 +1142,7 @@ impl Lender0 {
         let collateral_contract = CollateralContract::new(
             borrower_pk,
             lender_pk,
-            timelock,
+            timelock.into(),
             (repayment_principal_output, self.address_blinder),
             self.oracle_pk,
             min_collateral_price,
@@ -1292,7 +1293,7 @@ struct LoanAmounts {
 pub struct Lender1 {
     keypair: (SecretKey, PublicKey),
     address: Address,
-    timelock: u32,
+    timelock: Timelock,
     loan_transaction: Transaction,
     collateral_contract: CollateralContract,
     collateral_amount: Amount,
@@ -1378,7 +1379,7 @@ impl Lender1 {
 
         let mut liquidation_transaction = Transaction {
             version: 2,
-            lock_time: self.timelock,
+            lock_time: self.timelock.into(),
             input: tx_ins,
             output: tx_outs,
         };
@@ -1508,6 +1509,61 @@ pub mod transaction_as_string {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Timelock {
+    Timestamp(u32),
+    BlockHeight(u32),
+}
+
+impl Timelock {
+    // https://github.com/bitcoin/bitcoin/blob/b620b2d58a55a88ad21da70cb2000863ef17b651/src/script/script.h#L37-L39
+    const LOCKTIME_THRESHOLD: u32 = 500000000;
+
+    pub fn new_timestamp(n: u32) -> Result<Self, NotATimestamp> {
+        if n < Self::LOCKTIME_THRESHOLD {
+            return Err(NotATimestamp(n));
+        }
+
+        Ok(Self::Timestamp(n))
+    }
+
+    pub fn new_block_height(n: u32) -> Result<Self, NotABlockHeight> {
+        if n >= Self::LOCKTIME_THRESHOLD {
+            return Err(NotABlockHeight(n));
+        }
+
+        Ok(Self::BlockHeight(n))
+    }
+}
+
+#[derive(thiserror::Error, Debug, PartialEq)]
+#[error("Timelock based on timestamp must be over 500000000, got {0}")]
+pub struct NotATimestamp(u32);
+
+#[derive(thiserror::Error, Debug, PartialEq)]
+#[error("Timelock based on block height must be under 500000000, got {0}")]
+pub struct NotABlockHeight(u32);
+
+impl From<Timelock> for u32 {
+    fn from(timelock: Timelock) -> Self {
+        match timelock {
+            Timelock::Timestamp(inner) | Timelock::BlockHeight(inner) => inner,
+        }
+    }
+}
+
+impl From<u32> for Timelock {
+    fn from(n: u32) -> Self {
+        log::warn!("Choose a Timelock type explicitly via constructors");
+
+        if n < Timelock::LOCKTIME_THRESHOLD {
+            Self::BlockHeight(n)
+        } else {
+            Self::Timestamp(n)
+        }
+    }
+}
+
 /// Possible networks on which the loan contract may be deployed.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 enum Chain {
@@ -1585,5 +1641,27 @@ mod constant_tests {
         let actual = Script::from(CollateralContract::COV_SCRIPT_BYTES.to_vec());
 
         assert_eq!(actual, expected);
+    }
+}
+
+#[cfg(test)]
+mod timelock_tests {
+    use super::{NotABlockHeight, NotATimestamp, Timelock};
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn locktime_under_threshold_is_blocktime(n in 0u32..=Timelock::LOCKTIME_THRESHOLD) {
+            prop_assert_eq!(Timelock::new_block_height(n), Ok(Timelock::BlockHeight(n)));
+            prop_assert_eq!(Timelock::new_timestamp(n), Err(NotATimestamp(n)));
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn locktime_over_threshold_is_timestamp(n in Timelock::LOCKTIME_THRESHOLD..=u32::MAX) {
+            prop_assert_eq!(Timelock::new_timestamp(n), Ok(Timelock::Timestamp(n)));
+            prop_assert_eq!(Timelock::new_block_height(n), Err(NotABlockHeight(n)));
+        }
     }
 }

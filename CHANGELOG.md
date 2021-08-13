@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The provided wallet comes with a UTXO cache which this is updated using `Wallet::sync`.
   This allows users of the library to optimise the number of requests to their backend.
   Users can also sign said UTXOs by calling `Wallet::sign`.
+- `Timelock` type to allow users of the library to explicitly choose the type of timelock they want to use when building the loan transaction.
+  For the time being, users can still pass in a `u32`, but they are encouraged not to.
 
 ### Changed
 

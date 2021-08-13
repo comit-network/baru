@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::{Context, Result};
-use baru::loan::{Borrower0, CollateralContract, Lender0};
+use baru::loan::{Borrower0, CollateralContract, Lender0, Timelock};
 use baru::oracle;
 use elements::bitcoin::Amount;
 use elements::secp256k1_zkp::SECP256K1;
@@ -72,7 +72,7 @@ async fn borrow_and_repay() {
         (lender, address)
     };
 
-    let timelock = 10;
+    let timelock = Timelock::new_block_height(10).unwrap();
     let principal_amount = Amount::from_btc(38_000.0).unwrap();
     let principal_inputs = wallet.coin_select(principal_amount, usdt_asset_id).unwrap();
     let repayment_amount = principal_amount + Amount::from_btc(1_000.0).unwrap();
@@ -208,7 +208,7 @@ async fn lend_and_liquidate() {
         (lender, address)
     };
 
-    let timelock = 10;
+    let timelock = Timelock::new_block_height(10).unwrap();
     let principal_amount = Amount::from_btc(38_000.0).unwrap();
     let principal_inputs = wallet.coin_select(principal_amount, usdt_asset_id).unwrap();
     let repayment_amount = principal_amount + Amount::from_btc(1_000.0).unwrap();
@@ -321,7 +321,7 @@ async fn lend_and_dynamic_liquidate() {
         (lender, address)
     };
 
-    let timelock = 10;
+    let timelock = Timelock::new_block_height(10).unwrap();
     let principal_amount = Amount::from_btc(38_000.0).unwrap();
     let principal_inputs = wallet.coin_select(principal_amount, usdt_asset_id).unwrap();
     let repayment_amount = principal_amount + Amount::from_btc(1_000.0).unwrap();
@@ -561,7 +561,7 @@ async fn can_run_protocol_with_principal_change_outputs() {
         (lender, address)
     };
 
-    let timelock = 10;
+    let timelock = Timelock::new_block_height(10).unwrap();
     let principal_amount = Amount::from_btc(38_000.0).unwrap();
     let principal_inputs = wallet
         .coin_select(
