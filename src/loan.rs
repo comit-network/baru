@@ -25,6 +25,9 @@ use std::future::Future;
 use std::str::FromStr;
 use std::time::SystemTime;
 
+#[cfg(test)]
+mod negative_tests;
+
 /// Secret key used to produce a signature which proves that an
 /// input's witness stack contains transaction data equivalent to the
 /// transaction which includes the input itself.
