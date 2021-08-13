@@ -11,7 +11,7 @@ resolver = "2"
 description = "Library to facilitate DeFi on Liquid"
 
 [dependencies]
-aes-gcm-siv = { version = "0.9", features = ["std"] }
+aes-gcm-siv = { version = "0.10", features = ["std"] }
 anyhow = "1"
 async-trait = "0.1"
 bdk = { version = "0.4", default-features = false }
@@ -20,6 +20,7 @@ conquer-once = "0.3"
 elements = { version = "0.18", features = ["serde-feature"] }
 elements-miniscript = { version = "0.1", features = ["use-serde"] }
 futures = "0.3"
+getrandom = { version = "0.2", features = ["js"] } # needed for aes-gcm-siv:0.10
 hex = "0.4"
 hkdf = { version = "0.11", features = ["std"] }
 itertools = "0.10"
