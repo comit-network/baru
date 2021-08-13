@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2021-08-20
+
+### Added
+
+- EncryptedWallet format which allows users to encrypt the Wallet using a password and the `Wallet::encrypt` method.
+  The encrypted format can be used to persist and retrieve the wallet.
+  The user can recover the Wallet by calling `Wallet::decrypt` on the EncryptedWallet.
+  The Utxo cache is dropped during encryption.
+  `Wallet::sync` should be called after decrypting the EncryptedWallet to refresh the Utxo cache.
+  API's to encrypt the xprv key and access the salt to have been deprecated as the EncryptedWallet should be used instead.
+
 ## [0.4.0] - 2021-08-13
 
 ### Added
