@@ -4,7 +4,7 @@ use crate::oracle;
 use anyhow::{anyhow, bail, Context, Result};
 use conquer_once::Lazy;
 use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
-use elements::confidential::{self, Asset, AssetBlindingFactor, ValueBlindingFactor};
+use elements::confidential::{self, Asset, AssetBlindingFactor, Value, ValueBlindingFactor};
 use elements::encode::serialize;
 use elements::hashes::hex::ToHex;
 use elements::pset;
@@ -503,23 +503,31 @@ impl Borrower0 {
         R: RngCore + CryptoRng,
     {
         let keypair = make_keypair(rng);
+        let address_blinding_pk =
+            secp256k1_zkp::PublicKey::from_secret_key(SECP256K1, &address_blinding_sk);
+
         let mut pset = PartiallySignedTransaction::new_v2();
 
         let collateral_output = TxOut {
             asset: confidential::Asset::Explicit(bitcoin_asset_id),
             value: confidential::Value::Explicit(collateral_amount.as_sat()),
-            nonce: confidential::Nonce::Null,
-            script_pubkey: Script::new(),
+            nonce: confidential::Nonce::Null, // set by lender
+            script_pubkey: Script::new(), // set by lender (corresponding to collateral contract)
             witness: TxOutWitness::default(),
         };
+        pset.add_output(pset::Output::from_txout(collateral_output));
 
-        let principal_output = TxOut {
-            asset: confidential::Asset::Explicit(usdt_asset_id),
-            value: confidential::Value::Explicit(0),
-            nonce: confidential::Nonce::Null,
-            script_pubkey: address.script_pubkey(),
-            witness: TxOutWitness::default(),
+        let principal_output = {
+            TxOut {
+                asset: confidential::Asset::Explicit(usdt_asset_id),
+                value: confidential::Value::Explicit(0), // set by lender
+                nonce: confidential::Nonce::Confidential(address_blinding_pk),
+                script_pubkey: address.script_pubkey(),
+                witness: TxOutWitness::default(),
+            }
         };
+        pset.add_output(pset::Output::from_txout(principal_output));
+
         let collateral_input_amount = collateral_inputs
             .iter()
             .map(|input| input.clone().into_unblinded_input(SECP256K1))
@@ -527,24 +535,27 @@ impl Borrower0 {
                 input.map(|input| sum + input.secrets.value).ok()
             })
             .context("could not sum collateral inputs")?;
+        let collateral_change_amount = collateral_input_amount - collateral_amount.as_sat();
+        if collateral_change_amount > 0 {
+            let collateral_change_output = TxOut {
+                asset: confidential::Asset::Explicit(bitcoin_asset_id),
+                value: confidential::Value::Explicit(collateral_change_amount),
+                nonce: confidential::Nonce::Confidential(address_blinding_pk),
+                script_pubkey: address.script_pubkey(),
+                witness: TxOutWitness::default(),
+            };
 
-        let change_output_amount = collateral_input_amount - collateral_amount.as_sat();
+            pset.add_output(pset::Output::from_txout(collateral_change_output));
+        }
 
-        let collateral_change_output = TxOut {
-            asset: confidential::Asset::Explicit(bitcoin_asset_id),
-            value: confidential::Value::Explicit(change_output_amount),
-            nonce: confidential::Nonce::Null,
-            script_pubkey: address.script_pubkey(),
-            witness: TxOutWitness::default(),
-        };
-
-        collateral_inputs
-            .iter()
-            .for_each(|input| pset.add_input(pset::Input::from_prevout(input.txin)));
-
-        pset.add_output(pset::Output::from_txout(collateral_output));
-        pset.add_output(pset::Output::from_txout(principal_output));
-        pset.add_output(pset::Output::from_txout(collateral_change_output));
+        collateral_inputs.iter().for_each(|input| {
+            pset.add_input(pset::Input {
+                previous_txid: input.txin.txid,
+                previous_output_index: input.txin.vout,
+                witness_utxo: Some(input.original_txout.clone()),
+                ..Default::default()
+            })
+        });
 
         Ok(Self {
             keypair,
@@ -1331,18 +1342,148 @@ impl Lender0 {
         })
     }
 
-    pub fn complete_loan_pset(
+    #[allow(clippy::too_many_arguments)]
+    pub fn complete_loan_pset<R, C>(
         self,
-        pset: PartiallySignedTransaction,
+        rng: &mut R,
+        secp: &Secp256k1<C>,
+        mut pset: PartiallySignedTransaction,
+        (principal_amount, principal_inputs): (Amount, Vec<Input>),
+        fee: Amount, // NOTE: Let's see what happens with https://github.com/comit-network/baru/discussions/57
+        borrower_address: Address,
         borrower_pk: PublicKey,
-        fee: Amount,
+        timelock: Timelock,
         repayment_amount: Amount,
         min_collateral_price: u64,
-        timelock: Timelock,
-        (principal_amount, principal_inputs): (Amount, Vec<Input>),
-    ) -> Self {
-        todo!()
+        price_min_timestamp: u64,
+    ) -> Result<Lender1>
+    where
+        R: RngCore + CryptoRng,
+        C: Verification + Signing,
+    {
+        let chain = Chain::new(&borrower_address, &self.address)?;
 
+        let collateral_index = pset
+            .outputs
+            .iter()
+            .position(|output| {
+                output.asset == Asset::Explicit(self.bitcoin_asset_id)
+                    && output.script_pubkey.is_empty()
+            })
+            .context("missing collateral")?;
+
+        let (repayment_principal_output, repayment_collateral_abf, repayment_collateral_vbf) = {
+            let dummy_asset_id = self.usdt_asset_id;
+            let dummy_abf = AssetBlindingFactor::new(rng);
+            let dummy_asset = Asset::new_confidential(secp, dummy_asset_id, dummy_abf);
+            let dummy_amount = principal_amount.as_sat();
+            let dummy_vbf = ValueBlindingFactor::new(rng);
+            let dummy_secrets =
+                TxOutSecrets::new(dummy_asset_id, dummy_abf, dummy_amount, dummy_vbf);
+            let dummy_inputs = [(dummy_asset, Some(&dummy_secrets))];
+
+            TxOut::new_not_last_confidential(
+                rng,
+                secp,
+                repayment_amount.as_sat(),
+                self.address.clone(),
+                self.usdt_asset_id,
+                &dummy_inputs,
+            )?
+        };
+        let collateral_contract = CollateralContract::new(
+            borrower_pk,
+            self.keypair.1,
+            timelock.into(),
+            (repayment_principal_output, self.address_blinder),
+            self.oracle_pk,
+            min_collateral_price,
+            price_min_timestamp,
+            chain,
+        )
+        .context("could not build collateral contract")?;
+
+        let (collateral_blinding_sk, collateral_blinding_pk) = make_keypair(rng);
+        let collateral_address = collateral_contract.blinded_address(collateral_blinding_pk.key);
+
+        pset.outputs[collateral_index].script_pubkey = collateral_address.script_pubkey();
+        pset.outputs[collateral_index].ecdh_pubkey = Some(collateral_blinding_pk);
+
+        let principal_index = pset
+            .outputs
+            .iter()
+            .position(|output| {
+                output.asset == Asset::Explicit(self.usdt_asset_id)
+                    && output.script_pubkey == borrower_address.script_pubkey()
+            })
+            .context("missing principal")?;
+
+        pset.outputs[principal_index].amount = Value::Explicit(principal_amount.as_sat());
+
+        let principal_input_amount = principal_inputs
+            .iter()
+            .map(|input| input.clone().into_unblinded_input(SECP256K1))
+            .try_fold(0, |sum, input| {
+                input.map(|input| sum + input.secrets.value).ok()
+            })
+            .context("could not sum principal inputs")?;
+        let principal_change_amount = principal_input_amount - principal_amount.as_sat();
+
+        let fee_output = TxOut::new_fee(fee.as_sat(), self.bitcoin_asset_id);
+        pset.add_output(pset::Output::from_txout(fee_output));
+
+        if principal_change_amount > 0 {
+            let address_blinding_pk =
+                secp256k1_zkp::PublicKey::from_secret_key(SECP256K1, &self.address_blinder);
+
+            let principal_change_output = TxOut {
+                asset: confidential::Asset::Explicit(self.usdt_asset_id),
+                value: confidential::Value::Explicit(principal_change_amount),
+                nonce: confidential::Nonce::Confidential(address_blinding_pk),
+                script_pubkey: self.address.script_pubkey(),
+                witness: TxOutWitness::default(),
+            };
+
+            pset.add_output(pset::Output::from_txout(principal_change_output));
+        }
+
+        principal_inputs.iter().for_each(|input| {
+            pset.add_input(pset::Input {
+                previous_txid: input.txin.txid,
+                previous_output_index: input.txin.vout,
+                witness_utxo: Some(input.original_txout.clone()),
+                ..Default::default()
+            })
+        });
+
+        let collateral_amount = pset.outputs[collateral_index]
+            .amount
+            .explicit()
+            .expect("amount to still be explicit");
+
+        let repayment_collateral_input = {
+            Input {
+                txin: OutPoint {
+                    txid: pset.unique_id()?, // TODO: Confirm that this is the final TXID
+                    vout: collateral_index as u32,
+                },
+                original_txout: pset.outputs[collateral_index].to_txout(),
+                blinding_key: collateral_blinding_sk,
+            }
+        };
+
+        Ok(Lender1 {
+            keypair: self.keypair,
+            address: self.address,
+            timelock,
+            loan_transaction: Transaction::default(),
+            collateral_contract,
+            collateral_amount: Amount::from_sat(collateral_amount),
+            repayment_collateral_input,
+            repayment_collateral_abf,
+            repayment_collateral_vbf,
+            bitcoin_asset_id: self.bitcoin_asset_id,
+        })
     }
 }
 
