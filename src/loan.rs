@@ -7,13 +7,15 @@ use elements::bitcoin::{Amount, Network, PrivateKey, PublicKey};
 use elements::confidential::{self, Asset, AssetBlindingFactor, ValueBlindingFactor};
 use elements::encode::serialize;
 use elements::hashes::hex::ToHex;
+use elements::pset;
 use elements::pset::serialize::Serialize;
+use elements::pset::PartiallySignedTransaction;
 use elements::script::Builder;
 use elements::secp256k1_zkp::{self, Secp256k1, SecretKey, Signing, Verification, SECP256K1};
 use elements::sighash::SigHashCache;
 use elements::{
     Address, AddressParams, AssetId, OutPoint, Script, SigHashType, Transaction, TxIn, TxInWitness,
-    TxOut, TxOutSecrets,
+    TxOut, TxOutSecrets, TxOutWitness,
 };
 use elements_miniscript::descriptor::CovSatisfier;
 use elements_miniscript::miniscript::satisfy::After;
@@ -481,6 +483,8 @@ pub struct Borrower0 {
     fee_sats_per_vbyte: Amount,
     bitcoin_asset_id: AssetId,
     usdt_asset_id: AssetId,
+    // placeholder approach to deal with deprecations strategy
+    pset: PartiallySignedTransaction,
 }
 
 impl Borrower0 {
@@ -488,7 +492,7 @@ impl Borrower0 {
     pub async fn new<R>(
         rng: &mut R,
         collateral_inputs: Vec<Input>,
-        address: Address,
+        address: Address, // add to outputs
         address_blinding_sk: SecretKey,
         collateral_amount: Amount,
         fee_sats_per_vbyte: Amount,
@@ -499,6 +503,48 @@ impl Borrower0 {
         R: RngCore + CryptoRng,
     {
         let keypair = make_keypair(rng);
+        let mut pset = PartiallySignedTransaction::new_v2();
+
+        let collateral_output = TxOut {
+            asset: confidential::Asset::Explicit(bitcoin_asset_id),
+            value: confidential::Value::Explicit(collateral_amount.as_sat()),
+            nonce: confidential::Nonce::Null,
+            script_pubkey: Script::new(),
+            witness: TxOutWitness::default(),
+        };
+
+        let principal_output = TxOut {
+            asset: confidential::Asset::Explicit(usdt_asset_id),
+            value: confidential::Value::Explicit(0),
+            nonce: confidential::Nonce::Null,
+            script_pubkey: address.script_pubkey(),
+            witness: TxOutWitness::default(),
+        };
+        let collateral_input_amount = collateral_inputs
+            .iter()
+            .map(|input| input.clone().into_unblinded_input(SECP256K1))
+            .try_fold(0, |sum, input| {
+                input.map(|input| sum + input.secrets.value).ok()
+            })
+            .context("could not sum collateral inputs")?;
+
+        let change_output_amount = collateral_input_amount - collateral_amount.as_sat();
+
+        let collateral_change_output = TxOut {
+            asset: confidential::Asset::Explicit(bitcoin_asset_id),
+            value: confidential::Value::Explicit(change_output_amount),
+            nonce: confidential::Nonce::Null,
+            script_pubkey: address.script_pubkey(),
+            witness: TxOutWitness::default(),
+        };
+
+        collateral_inputs
+            .iter()
+            .for_each(|input| pset.add_input(pset::Input::from_prevout(input.txin)));
+
+        pset.add_output(pset::Output::from_txout(collateral_output));
+        pset.add_output(pset::Output::from_txout(principal_output));
+        pset.add_output(pset::Output::from_txout(collateral_change_output));
 
         Ok(Self {
             keypair,
@@ -509,6 +555,7 @@ impl Borrower0 {
             fee_sats_per_vbyte,
             bitcoin_asset_id,
             usdt_asset_id,
+            pset,
         })
     }
 
@@ -652,6 +699,11 @@ impl Borrower0 {
     /// Get a copy of the borrower's PublicKey.
     pub fn pk(&self) -> PublicKey {
         self.keypair.1
+    }
+
+    /// Get a copy of the (borrower) PSET
+    pub fn pset(&self) -> PartiallySignedTransaction {
+        self.pset.clone()
     }
 }
 
@@ -1277,6 +1329,20 @@ impl Lender0 {
             repayment,
             min_collateral_price,
         })
+    }
+
+    pub fn complete_loan_pset(
+        self,
+        pset: PartiallySignedTransaction,
+        borrower_pk: PublicKey,
+        fee: Amount,
+        repayment_amount: Amount,
+        min_collateral_price: u64,
+        timelock: Timelock,
+        (principal_amount, principal_inputs): (Amount, Vec<Input>),
+    ) -> Self {
+        todo!()
+
     }
 }
 
