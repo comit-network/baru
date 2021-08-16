@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.0] - 2021-08-20
-
 ### Added
 
 - EncryptedWallet format which allows users to encrypt the Wallet using a password and the `Wallet::encrypt` method.
