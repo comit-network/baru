@@ -14,7 +14,7 @@ description = "Library to facilitate DeFi on Liquid"
 aes-gcm-siv = { version = "0.9", features = ["std"] }
 anyhow = "1"
 async-trait = "0.1"
-bdk = { version = "0.4", default-features = false }
+bdk = { version = "0.9", default-features = false }
 bip32 = { version = "0.2", features = ["secp256k1-ffi", "bip39"], default-features = false }
 conquer-once = "0.3"
 elements = { version = "0.18", features = ["serde-feature"] }
