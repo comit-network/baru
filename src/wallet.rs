@@ -22,6 +22,7 @@ use elements::{
 use hkdf::Hkdf;
 use itertools::Itertools;
 use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::iter;
@@ -32,11 +33,35 @@ pub trait GetUtxos {
     async fn get_utxos(&self, address: Address) -> Result<Vec<(OutPoint, TxOut)>>;
 }
 
-#[derive(Debug)]
+/// Derive the encryption key from the wallet's password and a salt.
+///
+/// # Choice of salt
+///
+/// The salt of HKDF can be public or secret and while it can operate without a salt, it is better to pass a salt value [0].
+///
+/// # Choice of ikm
+///
+/// The user's password is our input key material. The stronger the password, the better the resulting encryption key.
+///
+/// # Choice of info
+///
+/// HKDF can operate without `info`, however, it is useful to "tag" the derived key with its usage.
+/// In our case, we use the encryption key to encrypt the secret key and as such, tag it with `b"ENCRYPTION_KEY"`.
+///
+/// [0]: https://tools.ietf.org/html/rfc5869#section-3.1
+fn derive_encryption_key(salt: impl AsRef<[u8]>, password: impl AsRef<[u8]>) -> Result<[u8; 32]> {
+    let h = Hkdf::<Sha256>::new(Some(salt.as_ref()), password.as_ref());
+    let mut enc_key = [0u8; 32];
+    h.expand(b"ENCRYPTION_KEY", &mut enc_key)
+        .context("failed to derive encryption key")?;
+
+    Ok(enc_key)
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Wallet {
     name: String,
-    encryption_key: [u8; 32],
-    secret_key: SecretKey,
+    encryption_key: Option<([u8; 32])>,
     xprv: ExtendedPrivateKey<SecretKey>,
     sk_salt: [u8; 32],
     chain: Chain,
@@ -51,6 +76,22 @@ impl Wallet {
         Ok(())
     }
 
+    pub fn new_from_seed(name: String, seed: impl AsRef<[u8]>, chain: Chain) -> Result<Self> {
+        let sk_salt = thread_rng().gen::<[u8; 32]>();
+
+        let xprv = ExtendedPrivateKey::new(seed)?;
+
+        Ok(Self {
+            name,
+            encryption_key: None,
+            xprv,
+            sk_salt,
+            chain,
+            utxo_cache: vec![],
+        })
+    }
+
+    #[deprecated(note = "Use Self::new_from_seed instead", since = "0.4.0")]
     pub fn initialize_new(
         name: String,
         password: String,
@@ -59,22 +100,19 @@ impl Wallet {
     ) -> Result<Self> {
         let sk_salt = thread_rng().gen::<[u8; 32]>();
 
-        let encryption_key = Self::derive_encryption_key(&password, &sk_salt)?;
-
-        // TODO: derive key according to some derivation path
-        let secret_key = root_xprv.to_bytes();
+        let encryption_key = derive_encryption_key(&sk_salt, &password)?;
 
         Ok(Self {
             name,
-            encryption_key,
+            encryption_key: Some(encryption_key),
             sk_salt,
             chain,
-            secret_key: SecretKey::from_slice(&secret_key)?,
             xprv: root_xprv,
             utxo_cache: vec![],
         })
     }
 
+    #[deprecated(note = "Use EncryptedWallet::decrypt instead", since = "0.4.0")]
     pub fn initialize_existing(
         name: String,
         password: String,
@@ -89,7 +127,7 @@ impl Wallet {
         let mut sk_salt = [0u8; 32];
         hex::decode_to_slice(salt, &mut sk_salt).context("failed to decode salt as hex")?;
 
-        let encryption_key = Self::derive_encryption_key(&password, &sk_salt)?;
+        let encryption_key = derive_encryption_key(&sk_salt, &password)?;
 
         let cipher = Aes256GcmSiv::new(GenericArray::from_slice(&encryption_key));
         let nonce = GenericArray::from_slice(SECRET_KEY_ENCRYPTION_NONCE);
@@ -105,13 +143,9 @@ impl Wallet {
         let xprv = String::from_utf8(xprv)?;
         let root_xprv = ExtendedPrivateKey::from_str(xprv.as_str())?;
 
-        // TODO: derive key according to some derivation path
-        let secret_key = root_xprv.to_bytes();
-
         Ok(Self {
             name,
-            encryption_key,
-            secret_key: SecretKey::from_slice(&secret_key)?,
+            encryption_key: Some(encryption_key),
             xprv: root_xprv,
             sk_salt,
             chain,
@@ -120,7 +154,7 @@ impl Wallet {
     }
 
     pub fn get_public_key(&self) -> PublicKey {
-        PublicKey::from_secret_key(SECP256K1, &self.secret_key)
+        PublicKey::from_secret_key(SECP256K1, &self.secret_key())
     }
 
     pub fn get_address(&self) -> Address {
@@ -143,8 +177,10 @@ impl Wallet {
     ///
     /// We store the extended private key on disk and as such have to use a constant nonce, otherwise we would not be able to decrypt it again.
     /// The encryption only happens once and as such, there is conceptually only one message and we are not "reusing" the nonce which would be insecure.
+    #[deprecated(note = "Use Self::encrypt instead", since = "0.4.0")]
     pub fn encrypted_xprv_key(&self) -> Result<Vec<u8>> {
-        let cipher = Aes256GcmSiv::new(GenericArray::from_slice(&self.encryption_key));
+        let encryption_key = self.encryption_key.context("the wallet was initialised using Self::new_from_seed that is incompatible with this deprecated function")?;
+        let cipher = Aes256GcmSiv::new(GenericArray::from_slice(&encryption_key));
         let xprv = &self.xprv.to_string(Prefix::XPRV);
         let enc_sk = cipher
             .encrypt(
@@ -156,35 +192,33 @@ impl Wallet {
         Ok(enc_sk)
     }
 
-    /// Derive the encryption key from the wallet's password and a salt.
-    ///
-    /// # Choice of salt
-    ///
-    /// The salt of HKDF can be public or secret and while it can operate without a salt, it is better to pass a salt value [0].
-    ///
-    /// # Choice of ikm
-    ///
-    /// The user's password is our input key material. The stronger the password, the better the resulting encryption key.
-    ///
-    /// # Choice of info
-    ///
-    /// HKDF can operate without `info`, however, it is useful to "tag" the derived key with its usage.
-    /// In our case, we use the encryption key to encrypt the secret key and as such, tag it with `b"ENCRYPTION_KEY"`.
-    ///
-    /// [0]: https://tools.ietf.org/html/rfc5869#section-3.1
-    fn derive_encryption_key(password: &str, salt: &[u8]) -> Result<[u8; 32]> {
-        let h = Hkdf::<Sha256>::new(Some(salt), password.as_bytes());
-        let mut enc_key = [0u8; 32];
-        h.expand(b"ENCRYPTION_KEY", &mut enc_key)
-            .context("failed to derive encryption key")?;
-
-        Ok(enc_key)
+    /// Encrypt the wallet using a password.
+    /// The Utxo cache is dropped.
+    /// The password is salted using a randomly generated salt. The salt is stored in the EncryptedWallet type.
+    /// The EncryptedWallet can be converted back to a Wallet using the EncryptedWallet::decrypt method.
+    pub fn encrypt(&self, password: impl AsRef<[u8]>) -> Result<EncryptedWallet> {
+        let encryption_key = derive_encryption_key(self.sk_salt, password)?;
+        let cipher = Aes256GcmSiv::new(GenericArray::from_slice(encryption_key.as_ref()));
+        let xprv = &self.xprv.to_string(Prefix::XPRV);
+        let encrypted_xprv = cipher
+            .encrypt(
+                GenericArray::from_slice(SECRET_KEY_ENCRYPTION_NONCE),
+                xprv.as_bytes(),
+            )
+            .context("failed to encrypt secret key")?;
+        Ok(EncryptedWallet {
+            name: self.name.clone(),
+            encrypted_xprv,
+            sk_salt: self.sk_salt,
+            chain: self.chain,
+        })
     }
 
     pub fn name(&self) -> String {
         self.name.clone()
     }
 
+    #[deprecated(note = "Use Self::encrypt instead", since = "0.4.0")]
     pub fn sk_salt(&self) -> [u8; 32] {
         self.sk_salt
     }
@@ -218,7 +252,7 @@ impl Wallet {
     ///
     /// We choose to tag the derived key with `b"BLINDING_KEY"` in case we ever want to derive something else from the secret key.
     pub fn blinding_secret_key(&self) -> SecretKey {
-        let h = Hkdf::<sha2::Sha256>::new(None, self.secret_key.as_ref());
+        let h = Hkdf::<sha2::Sha256>::new(None, self.secret_key().as_ref());
 
         let mut bk = [0u8; 32];
         h.expand(b"BLINDING_KEY", &mut bk)
@@ -228,7 +262,9 @@ impl Wallet {
     }
 
     pub fn secret_key(&self) -> SecretKey {
-        self.secret_key
+        // TODO: derive key according to some derivation path
+        let secret_key = self.xprv.to_bytes();
+        SecretKey::from_slice(&secret_key).unwrap()
     }
 
     pub fn compute_balances(&self) -> Vec<BalanceEntry> {
@@ -639,7 +675,7 @@ pub struct BalanceEntry {
     pub value: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Chain {
     Elements,
     Liquid,
@@ -670,3 +706,92 @@ impl FromStr for Chain {
 #[derive(Debug, thiserror::Error)]
 #[error("Unsupported chain: {0}")]
 pub struct WrongChain(String);
+
+/// An Wallet with an encrypted xprv. This format should be used when you want to persist the wallet and recover it for later use.
+/// # Example
+/// ```
+/// let wallet = baru::Wallet::new_from_seed("wallet-1".to_string(), &[1u8; 32], baru::Chain::Elements).unwrap();
+///
+/// let password = "123";
+///
+/// let encrypted = wallet.encrypt(password).unwrap();
+/// let decrypted = encrypted.decrypt(password).unwrap();
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EncryptedWallet {
+    name: String,
+    encrypted_xprv: Vec<u8>,
+    sk_salt: [u8; 32],
+    chain: Chain,
+}
+
+impl EncryptedWallet {
+    /// Decrypt the wallet using a password.
+    /// Since the Utxo cache was dropped when the Wallet was encrypted, Wallet::sync needs to be called to refresh the cache.
+    pub fn decrypt(self, password: impl AsRef<[u8]>) -> Result<Wallet> {
+        let encryption_key = derive_encryption_key(self.sk_salt, password)?;
+        let cipher = Aes256GcmSiv::new(GenericArray::from_slice(&encryption_key));
+        let nonce = GenericArray::from_slice(SECRET_KEY_ENCRYPTION_NONCE);
+        let xprv = cipher
+            .decrypt(nonce, self.encrypted_xprv.as_slice())
+            .context("failed to decrypt secret key")?;
+
+        let xprv = String::from_utf8(xprv)?;
+        let xprv = ExtendedPrivateKey::from_str(xprv.as_str())?;
+
+        Ok(Wallet {
+            name: self.name,
+            encryption_key: None,
+            xprv,
+            sk_salt: self.sk_salt,
+            chain: self.chain,
+            utxo_cache: vec![],
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encrypt_decrypt_wallet_rountdtrip() {
+        let wallet =
+            Wallet::new_from_seed("wallet-1".to_string(), &[1u8; 32], Chain::Elements).unwrap();
+
+        let password = "123";
+
+        let encrypted = wallet.encrypt(password).unwrap();
+        let decrypted = encrypted.decrypt(password).unwrap();
+
+        assert_eq!(wallet, decrypted)
+    }
+
+    #[test]
+    fn serde_roundtrip_encrypted_wallet() {
+        let wallet =
+            Wallet::new_from_seed("wallet-1".to_string(), &[1u8; 32], Chain::Elements).unwrap();
+
+        let password = "123";
+        let encrypted = wallet.encrypt(password).unwrap();
+
+        let ser = serde_json::to_string(&encrypted).unwrap();
+        println!("{}", &ser);
+        let deser = serde_json::from_str::<EncryptedWallet>(&ser).unwrap();
+
+        assert_eq!(deser, encrypted)
+    }
+
+    #[test]
+    fn deser_json_snapshot() {
+        let json = r#"
+        {
+            "name":"wallet-1",
+            "encrypted_xprv":[201,19,224,118,17,221,153,30,172,177,140,161,205,33,157,38,144,44,132,112,3,213,198,8,194,238,83,251,181,232,248,148,152,112,96,213,102,15,131,230,117,8,110,240,39,210,52,77,222,4,43,95,178,34,47,16,174,96,222,74,35,48,154,24,163,208,142,197,33,92,83,51,197,35,30,30,116,24,18,233,65,167,28,232,108,249,138,176,6,194,88,103,38,228,81,141,13,242,98,210,129,171,74,241,10,133,206,68,84,196,9,98,152,253,49,161,197,241,28,196,19,116,121,118,210,89,123],"sk_salt":[252,148,200,216,216,187,198,93,6,180,163,211,127,82,181,102,194,68,220,1,71,161,83,9,80,130,27,191,126,135,80,183],
+            "chain":"Elements"
+        }
+        "#;
+
+        serde_json::from_str::<EncryptedWallet>(json).unwrap();
+    }
+}
